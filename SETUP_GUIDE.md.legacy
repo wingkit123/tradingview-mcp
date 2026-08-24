@@ -47,11 +47,21 @@ Mac:
 
 Windows:
 
-TradingView for Windows ships as an MSIX package (Microsoft Store and tvd-packages.tradingview.com install under `C:\Program Files\WindowsApps\`). The MSIX desktop package is not a reliable CDP target: builds may reject `--remote-debugging-port`, strip it, return **"Access is denied"**, or start from a copied folder and then crash. The active `Launch-TradingView-Debug.ps1` detects MSIX and stops with an explicit warning instead of pretending CDP is available.
+TradingView for Windows now ships **only as an MSIX package** (Microsoft Store and tvd-packages.tradingview.com both install under `C:\Program Files\WindowsApps\`). Use the launch script — it resolves the install via `Get-AppxPackage`, which works without admin rights:
 
-Use the TradingView web chart through a browser-CDP workflow, or install a legacy standalone `TradingView.exe` if you specifically need desktop CDP.
+```bat
+scripts\launch_tv_debug.bat
+```
 
-**Do not register a copied package as a development AppX.** `Add-AppxPackage -Register` against a copied MSIX can fail with `0x80070003` and unregister the working Store installation; recovery requires re-registering the original package from `C:\Program Files\WindowsApps\...` with `-DisableDevelopmentMode`. Do not modify WindowsApps ACLs or use the registration fallback on a working install.
+Or, preferred: let the `tv_launch` MCP tool do it — it auto-detects MSIX installs and, on Windows builds where launching from `WindowsApps` is blocked with **"Access is denied"**, automatically copies the package to `%LOCALAPPDATA%\tradingview-mcp\` (one-time, ~330MB) and launches from the copy. The copy keeps your login, layout, and chart state. If the fallback was used, the result includes `msix_local_copy: true`.
+
+Manual equivalent of that fallback, if you need it:
+
+```powershell
+$pkg = (Get-AppxPackage TradingView.Desktop).InstallLocation
+Copy-Item "$pkg\*" "$env:LOCALAPPDATA\tradingview-mcp\TradingView" -Recurse -Force
+& "$env:LOCALAPPDATA\tradingview-mcp\TradingView\TradingView.exe" --remote-debugging-port=9222
+```
 
 Reading files out of `WindowsApps` by exact path is allowed even where executing them isn't. Do **not** try to change ACLs on `WindowsApps` with `icacls` — it fails and can break app servicing.
 
@@ -105,7 +115,7 @@ Then `tv status`, `tv quote`, `tv pine compile`, etc. work from anywhere.
 | Problem | Solution |
 |---------|----------|
 | `cdp_connected: false` | Launch TradingView with `--remote-debugging-port=9222` |
-| Windows: "Access is denied", `bad option`, or no CDP from an MSIX install | Do not copy/register the package or change `WindowsApps` ACLs; use browser-CDP or a legacy standalone install |
+| Windows: "Access is denied" launching from `WindowsApps` | Use `tv_launch` (auto copy-fallback) or the manual copy snippet in Step 3 — never `icacls` on WindowsApps |
 | `ECONNREFUSED` | TradingView isn't running or port 9222 is blocked |
 | MCP server not showing in Claude Code | Check `~/.claude/.mcp.json` syntax, restart Claude Code |
 | `tv` command not found | Run `npm link` from the project directory |
