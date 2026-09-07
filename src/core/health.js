@@ -228,6 +228,12 @@ async function _probeCdp(cdpPort) {
 }
 
 function _spawnDetached(spawnFn, exe, args) {
+  if (process.platform === 'win32') {
+    const cmdArgs = ['/c', 'start', '""', exe, ...args];
+    const child = spawnFn('cmd.exe', cmdArgs, { detached: true, stdio: 'ignore', windowsHide: true });
+    child.unref();
+    return child;
+  }
   const child = spawnFn(exe, args, { detached: true, stdio: 'ignore' });
   child.unref();
   return child;
@@ -286,8 +292,21 @@ function _copyMsixPackageLocal(tvPath, { cpSync, rmSync, readdirSync, existsSync
 export async function launch({ port, kill_existing, _deps } = {}) {
   const deps = _resolveLaunchDeps(_deps);
   const cdpPort = port || CDP_PORT;
-  const killFirst = kill_existing !== false;
+  const killFirst = kill_existing === true;
   const platform = process.platform;
+
+  const existingCdp = await deps.probeCdp(cdpPort);
+  if (existingCdp && !killFirst) {
+    return {
+      success: true,
+      already_running: true,
+      platform,
+      cdp_port: cdpPort,
+      cdp_url: `http://${CDP_HOST}:${cdpPort}`,
+      browser: existingCdp.Browser,
+      user_agent: existingCdp['User-Agent'],
+    };
+  }
 
   const pathMap = {
     darwin: [
@@ -373,7 +392,7 @@ export async function launch({ port, kill_existing, _deps } = {}) {
       // Direct WindowsApps launch was blocked or CDP never bound — fall back to
       // a local copy of the package (see _copyMsixPackageLocal).
       const localExe = _copyMsixPackageLocal(tvPath, deps);
-      await killExisting();
+      if (killFirst) await killExisting();
       child = _spawnDetached(deps.spawn, localExe, cdpArgs);
       tvPath = localExe;
       usedLocalCopy = true;

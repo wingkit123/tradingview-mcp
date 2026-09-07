@@ -19,27 +19,52 @@ export async function drawShape({ shape, point, point2, overrides: overridesRaw,
 
   const before = await evaluate(`${apiPath}.getAllShapes().map(function(s) { return s.id; })`);
 
+  let createdEntityId = null;
   if (point2) {
     const p2time = requireFinite(point2.time, 'point2.time');
     const p2price = requireFinite(point2.price, 'point2.price');
-    await evaluate(`
-      ${apiPath}.createMultipointShape(
-        [{ time: ${p1time}, price: ${p1price} }, { time: ${p2time}, price: ${p2price} }],
-        { shape: ${safeString(shape)}, overrides: ${overridesStr}, text: ${textStr} }
-      )
-    `);
+    createdEntityId = await evaluate(`
+      (async function() {
+        return await ${apiPath}.createMultipointShape(
+          [{ time: ${p1time}, price: ${p1price} }, { time: ${p2time}, price: ${p2price} }],
+          { shape: ${safeString(shape)}, overrides: ${overridesStr}, text: ${textStr} }
+        );
+      })()
+    `, { awaitPromise: true });
   } else {
-    await evaluate(`
-      ${apiPath}.createShape(
-        { time: ${p1time}, price: ${p1price} },
-        { shape: ${safeString(shape)}, overrides: ${overridesStr}, text: ${textStr} }
-      )
-    `);
+    createdEntityId = await evaluate(`
+      (async function() {
+        try {
+          return await ${apiPath}.createShape(
+            { time: ${p1time}, price: ${p1price} },
+            { shape: ${safeString(shape)}, overrides: ${overridesStr}, text: ${textStr} }
+          );
+        } catch(e) {
+          try {
+            var ms = ${apiPath}._chartWidget.model().mainSeries();
+            var lb = ms && ms.bars ? ms.bars().last() : null;
+            var fallbackTime = (lb && lb.value ? lb.value[0] : (lb && lb[0] ? lb[0] : null));
+            if (!fallbackTime) {
+              var r = ${apiPath}._chartWidget.model().model().timeScale().points();
+              var range = r ? r.range().value() : null;
+              fallbackTime = range ? r.valueAt(range.lastIndex) : null;
+            }
+            if (fallbackTime) {
+              return await ${apiPath}.createShape(
+                { time: fallbackTime, price: ${p1price} },
+                { shape: ${safeString(shape)}, overrides: ${overridesStr}, text: ${textStr} }
+              );
+            }
+          } catch(e2) {}
+          throw e;
+        }
+      })()
+    `, { awaitPromise: true });
   }
 
   await new Promise(r => setTimeout(r, 200));
   const after = await evaluate(`${apiPath}.getAllShapes().map(function(s) { return s.id; })`);
-  const newId = (after || []).find(id => !(before || []).includes(id)) || null;
+  const newId = (typeof createdEntityId === 'string' && createdEntityId) || (after || []).find(id => !(before || []).includes(id)) || null;
   const result = { entity_id: newId };
   return { success: true, shape, entity_id: result?.entity_id };
 }
@@ -49,8 +74,32 @@ export async function listDrawings() {
   const shapes = await _evaluate(`
     (function() {
       var api = ${apiPath};
-      var all = api.getAllShapes();
-      return all.map(function(s) { return { id: s.id, name: s.name }; });
+      var seen = new Set();
+      var result = [];
+      try {
+        var all = api.getAllShapes() || [];
+        for (var i = 0; i < all.length; i++) {
+          var s = all[i];
+          if (s && s.id && !seen.has(s.id)) {
+            seen.add(s.id);
+            result.push({ id: s.id, name: s.name });
+          }
+        }
+      } catch(e) {}
+      try {
+        var model = api._chartWidget.model().model();
+        var dsList = model.dataSources() || [];
+        for (var j = 0; j < dsList.length; j++) {
+          var ds = dsList[j];
+          var dsId = ds && typeof ds.id === 'function' ? ds.id() : (ds ? ds.id : null);
+          var dsName = ds && typeof ds.name === 'function' ? ds.name() : (ds ? ds.name : null);
+          if (dsId && !seen.has(dsId)) {
+            seen.add(dsId);
+            result.push({ id: dsId, name: dsName });
+          }
+        }
+      } catch(e2) {}
+      return result;
     })()
   `);
   return { success: true, count: shapes?.length || 0, shapes: shapes || [] };
@@ -91,15 +140,24 @@ export async function removeOne({ entity_id }) {
     (function() {
       var api = ${apiPath};
       var eid = ${safeString(entity_id)};
-      var before = api.getAllShapes();
-      var found = false;
-      for (var i = 0; i < before.length; i++) { if (before[i].id === eid) { found = true; break; } }
-      if (!found) return { removed: false, error: 'Shape not found: ' + eid, available: before.map(function(s) { return s.id; }) };
-      api.removeEntity(eid);
-      var after = api.getAllShapes();
-      var stillExists = false;
-      for (var j = 0; j < after.length; j++) { if (after[j].id === eid) { stillExists = true; break; } }
-      return { removed: !stillExists, entity_id: eid, remaining_shapes: after.length };
+      var model = api._chartWidget.model().model();
+      var ds = model.dataSourceForId ? model.dataSourceForId(eid) : null;
+      var before = api.getAllShapes() || [];
+      var inShapes = before.some(function(s) { return s.id === eid; });
+      if (!ds && !inShapes) {
+        return { removed: true, notFound: true, entity_id: eid, remaining_shapes: before.length };
+      }
+      try {
+        api.removeEntity(eid);
+      } catch(e) {
+        if (ds && typeof model.removeSource === 'function') {
+          try { model.removeSource(ds); } catch(e2) {}
+        }
+      }
+      var afterDs = model.dataSourceForId ? model.dataSourceForId(eid) : null;
+      var afterShapes = api.getAllShapes() || [];
+      var stillExists = !!afterDs || afterShapes.some(function(s) { return s.id === eid; });
+      return { removed: !stillExists, entity_id: eid, remaining_shapes: afterShapes.length };
     })()
   `);
   if (result?.error) throw new Error(result.error);

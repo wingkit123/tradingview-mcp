@@ -5,10 +5,12 @@ REM Usage: scripts\launch_tv_debug.bat [port]
 set PORT=%1
 if "%PORT%"=="" set PORT=9222
 
-REM Kill existing TradingView instances
-REM (ping -n is used for waits throughout: timeout /t aborts when stdin is redirected)
-taskkill /F /IM TradingView.exe >nul 2>&1
-ping -n 3 127.0.0.1 >nul
+REM Check if CDP is already listening on port
+curl -s http://127.0.0.1:%PORT%/json/version >nul 2>&1
+if %errorlevel% equ 0 (
+    echo TradingView CDP is already active on port %PORT%.
+    exit /b 0
+)
 
 REM Auto-detect TradingView install location
 set "TV_EXE="

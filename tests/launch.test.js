@@ -44,10 +44,11 @@ function msixDeps({ spawnFailures = [], cdpBindsFor = [], copyExists = false } =
       if (cmd.includes('taskkill')) { state.killed++; return ''; }
       throw new Error(`unexpected execSync: ${cmd}`);
     },
-    spawn: (exe) => {
-      state.spawned.push(exe);
-      const fail = spawnFailures.some((s) => exe.includes(s));
-      if (!fail && cdpBindsFor.some((s) => exe.includes(s))) state.cdpUp = true;
+    spawn: (exe, args = []) => {
+      const full = [exe, ...args].join(' ');
+      state.spawned.push(full);
+      const fail = spawnFailures.some((s) => full.includes(s));
+      if (!fail && cdpBindsFor.some((s) => full.includes(s))) state.cdpUp = true;
       return mockChild(fail ? { failWith: 'EACCES' } : {});
     },
     cpSync: (src, dst) => { state.copies.push({ src, dst }); },
@@ -75,7 +76,7 @@ describe('launch() — MSIX WindowsApps handling', { skip: !onWindows }, () => {
 
   it('EACCES on direct spawn falls back to local copy', async () => {
     const { deps, state } = msixDeps({ spawnFailures: ['WindowsApps'], cdpBindsFor: ['tradingview-mcp'] });
-    const result = await launch({ _deps: deps });
+    const result = await launch({ kill_existing: true, _deps: deps });
     assert.equal(result.success, true);
     assert.equal(result.msix_local_copy, true);
     assert.equal(result.binary, LOCAL_COPY_EXE);
@@ -123,7 +124,7 @@ describe('launch() — classic install path', { skip: !onWindows }, () => {
     const deps = {
       existsSync: (p) => p === classicExe,
       execSync: (cmd) => { if (cmd.includes('taskkill')) return ''; throw new Error(`unexpected: ${cmd}`); },
-      spawn: (exe) => { state.spawned.push(exe); state.cdpUp = true; return mockChild(); },
+      spawn: (exe, args = []) => { state.spawned.push([exe, ...args].join(' ')); state.cdpUp = true; return mockChild(); },
       cpSync: () => { throw new Error('should not copy'); },
       rmSync: () => {},
       readdirSync: () => [],
@@ -134,7 +135,7 @@ describe('launch() — classic install path', { skip: !onWindows }, () => {
     assert.equal(result.success, true);
     assert.equal(result.binary, classicExe);
     assert.equal(result.msix_local_copy, undefined);
-    assert.deepEqual(state.spawned, [classicExe]);
+    assert.match(state.spawned[0], /TradingView\.exe/);
   });
 
   it('throws a helpful error when TradingView is not found', async () => {

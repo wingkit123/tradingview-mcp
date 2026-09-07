@@ -1,0 +1,193 @@
+{
+  "schema_version": "snr-map.v1",
+  "symbol": "OANDA:XAUUSD",
+  "updated_at_utc": "2026-09-07T16:14:20.041Z",
+  "quote_price": 4387.34,
+  "ai_entity_count": 18,
+  "entity_ids": [
+    "3YmiNc",
+    "sN7kEH",
+    "3b2Lyu",
+    "k9BrHZ",
+    "UC3cBe",
+    "deTTLq",
+    "KqZ6dK",
+    "HSVATB",
+    "ywk7Wj",
+    "meIbxl",
+    "S05lrA",
+    "sBIoDC",
+    "7DWGIo",
+    "3SHe3l",
+    "pTOXGG",
+    "o6ZdbY",
+    "K6QDPh",
+    "BIX1n1"
+  ],
+  "active_entities": [
+    {
+      "entity_id": "3YmiNc",
+      "price": 4434.93,
+      "label": "[W Resistance + D Resistance (delta buy) @ 4434.93] (AI)",
+      "color": "#1A237E",
+      "width": 2,
+      "style": 0
+    },
+    {
+      "entity_id": "sN7kEH",
+      "price": 4427.35,
+      "label": "[W SBR + D SBR (delta sell) @ 4427.35] (AI)",
+      "color": "#1A237E",
+      "width": 2,
+      "style": 0
+    },
+    {
+      "entity_id": "3b2Lyu",
+      "price": 4420.59,
+      "label": "[W SBR + D SBR (delta buy) @ 4420.59] (AI)",
+      "color": "#1A237E",
+      "width": 2,
+      "style": 0
+    },
+    {
+      "entity_id": "k9BrHZ",
+      "price": 4416.58,
+      "label": "[W SBR + D ES (delta buy) @ 4416.58] (AI)",
+      "color": "#1A237E",
+      "width": 2,
+      "style": 0
+    },
+    {
+      "entity_id": "UC3cBe",
+      "price": 4411.01,
+      "label": "[W Resistance + D ES @ 4411.01] (AI)",
+      "color": "#1A237E",
+      "width": 2,
+      "style": 0
+    },
+    {
+      "entity_id": "deTTLq",
+      "price": 4392.91,
+      "label": "[W SBR + D SBR @ 4392.91] (AI)",
+      "color": "#1A237E",
+      "width": 2,
+      "style": 0
+    },
+    {
+      "entity_id": "KqZ6dK",
+      "price": 4388.94,
+      "label": "[★Delta SellRev @ 4388.94] (AI)",
+      "color": "#E65100",
+      "width": 2,
+      "style": 2
+    },
+    {
+      "entity_id": "HSVATB",
+      "price": 4384.75,
+      "label": "[W Support + D RBS @ 4384.75] (AI)",
+      "color": "#1A237E",
+      "width": 2,
+      "style": 0
+    },
+    {
+      "entity_id": "ywk7Wj",
+      "price": 4378.26,
+      "label": "[W RBS (delta buy) @ 4378.26] (AI)",
+      "color": "#1A237E",
+      "width": 2,
+      "style": 0
+    },
+    {
+      "entity_id": "meIbxl",
+      "price": 4372.95,
+      "label": "[W RBS + D RBS (delta buy/sell) @ 4372.95] (AI)",
+      "color": "#1A237E",
+      "width": 2,
+      "style": 0
+    },
+    {
+      "entity_id": "S05lrA",
+      "price": 4356.29,
+      "label": "[W SBR + D SBR @ 4356.29] (AI)",
+      "color": "#1A237E",
+      "width": 2,
+      "style": 0
+    },
+    {
+      "entity_id": "sBIoDC",
+      "label": "📌 XAUUSD AI Private Analyst Brief (OANDA)\nMacro Trend: Weekly/Daily Bullish Momentum\nImmediate Support: 4384.75 | Immediate Resistance: 4388.94\nStructure: W/D Primary Anchors + Nested LTF (H4/H1) + Delta Volume Reversals\nSOP Guard: User drawings (without AI tag) strictly protected."
+    },
+    {
+      "entity_id": "7DWGIo",
+      "shape": "rectangle",
+      "type": "SELL",
+      "name": "Sell Zone 1 (Immediate Resistance)",
+      "label": "[Sell Zone 1 (Immediate Resistance) @ 4390.00 - 4405.00 | Width 15pt] (AI)",
+      "high": 4405,
+      "low": 4390,
+      "width": 15,
+      "color": "#E53935",
+      "confluence": "H1 SBR (4392.91) + Delta SellRev (4388.94)"
+    },
+    {
+      "entity_id": "3SHe3l",
+      "shape": "rectangle",
+      "type": "SELL",
+      "name": "Sell Zone 2 (Major H4/D Supply)",
+      "label": "[Sell Zone 2 (Major H4/D Supply) @ 4415.00 - 4430.00 | Width 15pt] (AI)",
+      "high": 4430,
+      "low": 4415,
+      "width": 15,
+      "color": "#C62828",
+      "confluence": "W/D SBR (4416.58, 4420.59, 4427.35) + Delta Buy/Sell clusters"
+    },
+    {
+      "entity_id": "pTOXGG",
+      "shape": "rectangle",
+      "type": "SELL",
+      "name": "Sell Zone 3 (Weekly Macro Extreme)",
+      "label": "[Sell Zone 3 (Weekly Macro Extreme) @ 4435.00 - 4445.00 | Width 10pt] (AI)",
+      "high": 4445,
+      "low": 4435,
+      "width": 10,
+      "color": "#B71C1C",
+      "confluence": "W/D Resistance (4434.93) + User D ES+SBR (4436.17)"
+    },
+    {
+      "entity_id": "o6ZdbY",
+      "shape": "rectangle",
+      "type": "BUY",
+      "name": "Buy Zone 1 (Immediate Support)",
+      "label": "[Buy Zone 1 (Immediate Support) @ 4370.00 - 4385.00 | Width 15pt] (AI)",
+      "high": 4385,
+      "low": 4370,
+      "width": 15,
+      "color": "#2E7D32",
+      "confluence": "W Support/D RBS (4384.75, 4378.26, 4372.95) + Delta Buy confluence"
+    },
+    {
+      "entity_id": "K6QDPh",
+      "shape": "rectangle",
+      "type": "BUY",
+      "name": "Buy Zone 2 (Daily/H4 Demand)",
+      "label": "[Buy Zone 2 (Daily/H4 Demand) @ 4350.00 - 4365.00 | Width 15pt] (AI)",
+      "high": 4365,
+      "low": 4350,
+      "width": 15,
+      "color": "#1B5E20",
+      "confluence": "W/D SBR (4356.29) + User D EB (4350.46)"
+    },
+    {
+      "entity_id": "BIX1n1",
+      "shape": "rectangle",
+      "type": "BUY",
+      "name": "Buy Zone 3 (Weekly Key Base Demand)",
+      "label": "[Buy Zone 3 (Weekly Key Base Demand) @ 4325.00 - 4340.00 | Width 15pt] (AI)",
+      "high": 4340,
+      "low": 4325,
+      "width": 15,
+      "color": "#004D40",
+      "confluence": "W EB + D EB (4333.16)"
+    }
+  ]
+}

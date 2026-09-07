@@ -85,7 +85,7 @@ Or follow the manual steps below.
 ```bash
 git clone https://github.com/tradesdontlie/tradingview-mcp.git
 cd tradingview-mcp
-npm install
+bun install
 ```
 
 ### 2. Launch TradingView with CDP
@@ -123,7 +123,7 @@ Add to your Claude Code MCP config (`~/.claude/.mcp.json` or project `.mcp.json`
 {
   "mcpServers": {
     "tradingview": {
-      "command": "node",
+      "command": "bun",
       "args": ["/path/to/tradingview-mcp/src/server.js"]
     }
   }
@@ -141,11 +141,13 @@ Ask Claude: *"Use tv_health_check to verify TradingView is connected"*
 Every MCP tool is also accessible as a `tv` CLI command. All output is JSON for piping with `jq`.
 
 ```bash
-# Install globally (optional)
-npm link
+# Run directly with bun (fastest)
+bun run tv <command>
+# Or:
+bun src/cli/index.js <command>
 
-# Or run directly
-node src/cli/index.js <command>
+# Install globally (optional)
+bun link
 ```
 
 ### Quick Examples

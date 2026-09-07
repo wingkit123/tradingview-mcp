@@ -1,0 +1,115 @@
+{
+  "schema_version": "snr-map.v1",
+  "symbol": "OANDA:XAUUSD",
+  "updated_at_utc": "2026-09-07T15:52:25.312Z",
+  "quote_price": 4387.34,
+  "ai_entity_count": 12,
+  "entity_ids": [
+    "3YmiNc",
+    "sN7kEH",
+    "3b2Lyu",
+    "k9BrHZ",
+    "UC3cBe",
+    "deTTLq",
+    "KqZ6dK",
+    "HSVATB",
+    "ywk7Wj",
+    "meIbxl",
+    "S05lrA",
+    "sBIoDC"
+  ],
+  "active_entities": [
+    {
+      "entity_id": "3YmiNc",
+      "price": 4434.93,
+      "label": "[W Resistance + D Resistance (delta buy) @ 4434.93] (AI)",
+      "color": "#1A237E",
+      "width": 2,
+      "style": 0
+    },
+    {
+      "entity_id": "sN7kEH",
+      "price": 4427.35,
+      "label": "[W SBR + D SBR (delta sell) @ 4427.35] (AI)",
+      "color": "#1A237E",
+      "width": 2,
+      "style": 0
+    },
+    {
+      "entity_id": "3b2Lyu",
+      "price": 4420.59,
+      "label": "[W SBR + D SBR (delta buy) @ 4420.59] (AI)",
+      "color": "#1A237E",
+      "width": 2,
+      "style": 0
+    },
+    {
+      "entity_id": "k9BrHZ",
+      "price": 4416.58,
+      "label": "[W SBR + D ES (delta buy) @ 4416.58] (AI)",
+      "color": "#1A237E",
+      "width": 2,
+      "style": 0
+    },
+    {
+      "entity_id": "UC3cBe",
+      "price": 4411.01,
+      "label": "[W Resistance + D ES @ 4411.01] (AI)",
+      "color": "#1A237E",
+      "width": 2,
+      "style": 0
+    },
+    {
+      "entity_id": "deTTLq",
+      "price": 4392.91,
+      "label": "[W SBR + D SBR @ 4392.91] (AI)",
+      "color": "#1A237E",
+      "width": 2,
+      "style": 0
+    },
+    {
+      "entity_id": "KqZ6dK",
+      "price": 4388.94,
+      "label": "[★Delta SellRev @ 4388.94] (AI)",
+      "color": "#E65100",
+      "width": 2,
+      "style": 2
+    },
+    {
+      "entity_id": "HSVATB",
+      "price": 4384.75,
+      "label": "[W Support + D RBS @ 4384.75] (AI)",
+      "color": "#1A237E",
+      "width": 2,
+      "style": 0
+    },
+    {
+      "entity_id": "ywk7Wj",
+      "price": 4378.26,
+      "label": "[W RBS (delta buy) @ 4378.26] (AI)",
+      "color": "#1A237E",
+      "width": 2,
+      "style": 0
+    },
+    {
+      "entity_id": "meIbxl",
+      "price": 4372.95,
+      "label": "[W RBS + D RBS (delta buy/sell) @ 4372.95] (AI)",
+      "color": "#1A237E",
+      "width": 2,
+      "style": 0
+    },
+    {
+      "entity_id": "S05lrA",
+      "price": 4356.29,
+      "label": "[W SBR + D SBR @ 4356.29] (AI)",
+      "color": "#1A237E",
+      "width": 2,
+      "style": 0
+    },
+    {
+      "entity_id": "sBIoDC",
+      "label": "📌 XAUUSD AI Private Analyst Brief (OANDA)\nMacro Trend: Weekly/Daily Bullish Momentum\nImmediate Support: 4384.75 | Immediate Resistance: 4388.94\nStructure: W/D Primary Anchors + Nested LTF (H4/H1) + Delta Volume Reversals\nSOP Guard: User drawings (without AI tag) strictly protected."
+    }
+  ]
+}

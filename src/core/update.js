@@ -74,7 +74,7 @@ export async function update({ _deps } = {}) {
   }
 
   const behind = Number(git('rev-list --count HEAD..origin/main'));
-  const lockChanged = git('diff --name-only HEAD origin/main -- package-lock.json') !== '';
+  const lockChanged = git('diff --name-only HEAD origin/main -- bun.lock package-lock.json') !== '';
 
   git('merge --ff-only origin/main', 30000);
   const after = git('rev-parse HEAD');
@@ -83,10 +83,15 @@ export async function update({ _deps } = {}) {
   let depsWarning;
   if (lockChanged) {
     try {
-      execSync('npm ci --no-audit --no-fund', { cwd: repoRoot, timeout: 300000, stdio: ['ignore', 'pipe', 'pipe'] });
+      execSync('bun install --frozen-lockfile', { cwd: repoRoot, timeout: 300000, stdio: ['ignore', 'pipe', 'pipe'] });
       depsInstalled = true;
-    } catch (err) {
-      depsWarning = `Code updated but npm ci failed — run it manually in ${repoRoot}: ${err.message}`;
+    } catch {
+      try {
+        execSync('npm ci --no-audit --no-fund', { cwd: repoRoot, timeout: 300000, stdio: ['ignore', 'pipe', 'pipe'] });
+        depsInstalled = true;
+      } catch (err) {
+        depsWarning = `Code updated but dependency install failed — run 'bun install' manually in ${repoRoot}: ${err.message}`;
+      }
     }
   }
 

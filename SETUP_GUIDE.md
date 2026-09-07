@@ -7,7 +7,7 @@ This file is a step-by-step guide for Claude Code (or any LLM agent) to install 
 ```bash
 git clone https://github.com/tradesdontlie/tradingview-mcp.git ~/tradingview-mcp
 cd ~/tradingview-mcp
-npm install
+bun install
 ```
 
 If the user specifies a different install path, use that instead of `~/tradingview-mcp`.
@@ -20,7 +20,7 @@ Add the server to the user's Claude Code MCP configuration. The config file is a
 {
   "mcpServers": {
     "tradingview": {
-      "command": "node",
+      "command": "bun",
       "args": ["<INSTALL_PATH>/src/server.js"]
     }
   }

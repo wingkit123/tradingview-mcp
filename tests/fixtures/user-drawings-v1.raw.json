@@ -1,0 +1,97 @@
+{
+  "symbol": "XAUUSD",
+  "timeframe": "60",
+  "timezone": "UTC",
+  "timestamp": "2026-08-31T12:00:00.000Z",
+  "visible_range": {
+    "from": 1700000000,
+    "to": 1700100000
+  },
+  "source_model_version": "tv_chart_model.v1",
+  "drawings": [
+    {
+      "id": "shape_trend_1",
+      "name": "LineToolTrendLine",
+      "type": "trend_line",
+      "points": [
+        { "price": 2350.5, "index": 100, "time": 1700000000 },
+        { "price": 2380.0, "index": 120, "time": 1700072000 }
+      ],
+      "text": "Bullish Trendline",
+      "properties": {
+        "linecolor": "#2962FF",
+        "linewidth": 2,
+        "linestyle": 0
+      }
+    },
+    {
+      "id": "shape_rect_1",
+      "name": "LineToolRectangle",
+      "type": "rectangle",
+      "points": [
+        { "price": 2390.0, "index": 130, "time": 1700080000 },
+        { "price": 2405.5, "index": 150, "time": 1700152000 }
+      ],
+      "text": "H1 POI Supply Zone",
+      "properties": {
+        "color": "#FF5252",
+        "backgroundColor": "rgba(255, 82, 82, 0.2)",
+        "linewidth": 1
+      }
+    },
+    {
+      "id": "shape_fib_1",
+      "name": "LineToolFibRetracement",
+      "type": "fib_retracement",
+      "points": [
+        { "price": 2300.0, "index": 50, "time": 1699900000 },
+        { "price": 2400.0, "index": 90, "time": 1699990000 }
+      ],
+      "text": "Key Fib Retracement",
+      "properties": {
+        "levels": [
+          { "coeff": 0.0, "price": 2300.0 },
+          { "coeff": 0.5, "price": 2350.0 },
+          { "coeff": 0.618, "price": 2361.8 },
+          { "coeff": 0.786, "price": 2378.6 },
+          { "coeff": 1.0, "price": 2400.0 }
+        ]
+      }
+    },
+    {
+      "id": "shape_label_1",
+      "name": "LineToolText",
+      "type": "text",
+      "points": [
+        { "price": 2395.0, "index": 140, "time": 1700100000 }
+      ],
+      "text": "CHOCH & SBR after BSL liquidity sweep",
+      "properties": {
+        "fontsize": 14,
+        "color": "#FFFFFF"
+      }
+    },
+    {
+      "id": "shape_unknown_1",
+      "name": "CustomExperimentalShape",
+      "type": "custom_poly_bezier",
+      "points": [
+        { "price": 2370.0, "index": 115, "time": 1700050000 }
+      ],
+      "text": "random experimental mark",
+      "properties": {
+        "color": "#00FF00"
+      }
+    },
+    {
+      "id": "shape_malformed_1",
+      "name": "LineToolRectangle",
+      "type": "rectangle",
+      "points": [
+        { "price": null, "index": null, "time": null }
+      ],
+      "text": "Malformed Box with null coords",
+      "properties": {}
+    }
+  ]
+}

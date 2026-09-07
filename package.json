@@ -13,7 +13,9 @@
   },
   "scripts": {
     "start": "node src/server.js",
+    "start:bun": "bun src/server.js",
     "tv": "node src/cli/index.js",
+    "tv:bun": "bun src/cli/index.js",
     "lint": "eslint src/",
     "test": "node --test tests/e2e.test.js tests/pine_analyze.test.js",
     "test:e2e": "node --test tests/e2e.test.js",
