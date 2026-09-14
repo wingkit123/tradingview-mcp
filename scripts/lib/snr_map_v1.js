@@ -65,6 +65,41 @@ export function hashManifest(payload) {
   return crypto.createHash('sha256').update(canonical, 'utf8').digest('hex');
 }
 
+/** Hash the exact entity collection persisted in an snr-map.v1 receipt. */
+export function hashSnrMapEntities({
+  schema_version = SCHEMA_VERSION,
+  symbol = 'OANDA:XAUUSD',
+  generated_at_sec,
+  quote_price,
+  entities = []
+} = {}) {
+  if (!Number.isFinite(generated_at_sec) || !Number.isFinite(quote_price) || !Array.isArray(entities)) {
+    throw new Error('Cannot hash SNR map receipt without finite timestamp, quote price, and entity array');
+  }
+  return hashManifest({
+    schema_version,
+    symbol,
+    generated_at_sec,
+    quote_price,
+    entity_count: entities.length,
+    entities: entities.map(e => ({
+      kind: e.kind ?? null,
+      shape: e.shape ?? null,
+      timeframe: e.timeframe ?? null,
+      reason: e.reason ?? null,
+      tags: e.tags ?? [],
+      point: e.point ?? null,
+      point2: e.point2 ?? null,
+      price: e.price ?? null,
+      high: e.high ?? null,
+      low: e.low ?? null,
+      equilibrium: e.equilibrium ?? null,
+      label: e.label ?? null,
+      overrides: e.overrides ?? {}
+    }))
+  });
+}
+
 /**
  * Extract closed bars (discarding the forming/open last bar).
  */
@@ -399,6 +434,115 @@ export function parseDeltaLabels(deltaLabels) {
 }
 
 /**
+ * Priority scoring for horizontal lines during clustering.
+ * Higher score = preferred cluster representative.
+ */
+function getHorizontalLinePriority(e) {
+  let tfScore = 0;
+  const tf = e.timeframe || (e.tags?.includes('W') ? 'W' : e.tags?.includes('D') ? 'D' : e.tags?.includes('H4') ? 'H4' : e.tags?.includes('H1') ? 'H1' : null);
+  if (tf === 'W') tfScore = 500;
+  else if (tf === 'D') tfScore = 400;
+  else if (tf === 'H4') tfScore = 300;
+  else if (tf === 'H1') tfScore = 200;
+  else if (e.reason === 'DELTA_REV' || e.tags?.includes('DELTA_REV')) tfScore = 150;
+  else if (e.reason === 'RANGE_EQ' || e.tags?.includes('RANGE_EQ')) tfScore = 100;
+  else tfScore = 50;
+
+  let reasonScore = 0;
+  if (e.reason === 'RBS' || e.reason === 'SBR') reasonScore = 50;
+  else if (e.reason?.includes('Swing')) reasonScore = 40;
+  else if (e.reason === 'EB' || e.reason === 'ES') reasonScore = 30;
+  else if (e.reason === 'DELTA_REV') reasonScore = 25;
+  else if (e.reason === 'RANGE_EQ') reasonScore = 20;
+
+  const timeScore = (e.point?.time && Number.isFinite(e.point.time)) ? e.point.time / 1e12 : 0;
+  return tfScore + reasonScore + timeScore;
+}
+
+/**
+ * Deterministic global horizontal-line canonical dedup/clustering pass with a 4.0 price-point threshold.
+ * Keeps one representative and merges confluence metadata deterministically.
+ */
+export function clusterHorizontalLines(lines = [], threshold = 4.0) {
+  if (!Array.isArray(lines) || lines.length === 0) return [];
+  if (lines.length === 1) return [...lines];
+
+  // Sort deterministically by price ascending, then tiebreak by priority descending, then label
+  const sorted = [...lines].sort((a, b) => {
+    const pA = a.price ?? a.point?.price ?? 0;
+    const pB = b.price ?? b.point?.price ?? 0;
+    if (Math.abs(pA - pB) > 1e-6) return pA - pB;
+    const prioDiff = getHorizontalLinePriority(b) - getHorizontalLinePriority(a);
+    if (prioDiff !== 0) return prioDiff;
+    return (a.label || '').localeCompare(b.label || '');
+  });
+
+  const clusters = [];
+  let currentCluster = [sorted[0]];
+
+  for (let i = 1; i < sorted.length; i++) {
+    const item = sorted[i];
+    const itemPrice = item.price ?? item.point?.price ?? 0;
+    const clusterMinPrice = currentCluster[0].price ?? currentCluster[0].point?.price ?? 0;
+
+    if (itemPrice - clusterMinPrice <= threshold) {
+      currentCluster.push(item);
+    } else {
+      clusters.push(currentCluster);
+      currentCluster = [item];
+    }
+  }
+  if (currentCluster.length > 0) {
+    clusters.push(currentCluster);
+  }
+
+  const result = [];
+  for (const cluster of clusters) {
+    if (cluster.length === 1) {
+      result.push(cluster[0]);
+      continue;
+    }
+
+    // Select the best representative by priority
+    let representative = cluster[0];
+    let bestScore = getHorizontalLinePriority(representative);
+
+    for (let j = 1; j < cluster.length; j++) {
+      const score = getHorizontalLinePriority(cluster[j]);
+      if (score > bestScore) {
+        bestScore = score;
+        representative = cluster[j];
+      }
+    }
+
+    // Merge confluence metadata deterministically
+    const mergedTagsSet = new Set();
+    const confluenceTfs = new Set();
+    const confluenceReasons = new Set();
+
+    for (const member of cluster) {
+      (member.tags || []).forEach(t => mergedTagsSet.add(t));
+      if (member.timeframe) confluenceTfs.add(member.timeframe);
+      if (member.reason) confluenceReasons.add(member.reason);
+    }
+
+    const mergedTags = Array.from(mergedTagsSet).sort();
+    const mergedConfluenceTfs = Array.from(confluenceTfs).sort();
+    const mergedConfluenceReasons = Array.from(confluenceReasons).sort();
+
+    result.push({
+      ...representative,
+      tags: mergedTags,
+      confluence_count: cluster.length,
+      confluence_timeframes: mergedConfluenceTfs,
+      confluence_reasons: mergedConfluenceReasons
+    });
+  }
+
+  return result;
+}
+
+/**
  * Pure SNR map builder.
  * Builds immutable snr-map.v1 payload.
  */
@@ -416,7 +560,7 @@ export function buildSnrMap({
     throw new Error('Valid quote price is required for SNR map building');
   }
 
-  const entities = [];
+  const rawEntities = [];
   const scan50Min = quotePrice - 50.0;
   const scan50Max = quotePrice + 50.0;
 
@@ -436,7 +580,7 @@ export function buildSnrMap({
     if (wp.time == null || !Number.isFinite(wp.time)) continue;
     const sbrRbs = detectSbrRbs(wp, closedWBars);
     const label = `[W - ${sbrRbs.action} @ ${wp.price.toFixed(2)}] (AI)`;
-    entities.push({
+    rawEntities.push({
       kind: 'horizontal_line',
       shape: 'horizontal_line',
       price: wp.price,
@@ -460,11 +604,11 @@ export function buildSnrMap({
   const dPivots = detectPivots(dBars, 3, 3, scan50Min, scan50Max);
   for (const dp of dPivots) {
     if (dp.time == null || !Number.isFinite(dp.time)) continue;
-    if (entities.some(e => e.kind === 'horizontal_line' && Math.abs(e.price - dp.price) <= 2.0)) continue;
+    if (rawEntities.some(e => e.kind === 'horizontal_line' && Math.abs(e.price - dp.price) <= 2.0)) continue;
     const sbrRbs = detectSbrRbs(dp, closedDBars);
     const vTag = dp.isSharp ? ' (V角)' : '';
     const label = `[D - ${sbrRbs.action}${vTag} @ ${dp.price.toFixed(2)}] (AI)`;
-    entities.push({
+    rawEntities.push({
       kind: 'horizontal_line',
       shape: 'horizontal_line',
       price: dp.price,
@@ -491,10 +635,10 @@ export function buildSnrMap({
 
   for (const h4p of h4Pivots) {
     if (h4p.time == null || !Number.isFinite(h4p.time)) continue;
-    if (entities.some(e => e.kind === 'horizontal_line' && Math.abs(e.price - h4p.price) <= 2.0)) continue;
+    if (rawEntities.some(e => e.kind === 'horizontal_line' && Math.abs(e.price - h4p.price) <= 2.0)) continue;
     const sbrRbs = detectSbrRbs(h4p, closedH4Bars);
     const label = `[H4 - ${sbrRbs.action} @ ${h4p.price.toFixed(2)}] (AI)`;
-    entities.push({
+    rawEntities.push({
       kind: 'horizontal_line',
       shape: 'horizontal_line',
       price: h4p.price,
@@ -512,7 +656,7 @@ export function buildSnrMap({
         textcolor: STYLES.H4.color
       }
     });
-    if (entities.filter(e => e.timeframe === 'H4').length >= 4) break;
+    if (rawEntities.filter(e => e.timeframe === 'H4').length >= 4) break;
   }
 
   // 4. H1 Pivots
@@ -521,10 +665,10 @@ export function buildSnrMap({
 
   for (const h1p of h1Pivots) {
     if (h1p.time == null || !Number.isFinite(h1p.time)) continue;
-    if (entities.some(e => e.kind === 'horizontal_line' && Math.abs(e.price - h1p.price) <= 2.0)) continue;
+    if (rawEntities.some(e => e.kind === 'horizontal_line' && Math.abs(e.price - h1p.price) <= 2.0)) continue;
     const sbrRbs = detectSbrRbs(h1p, closedH1Bars);
     const label = `[H1 - ${sbrRbs.action} @ ${h1p.price.toFixed(2)}] (AI)`;
-    entities.push({
+    rawEntities.push({
       kind: 'horizontal_line',
       shape: 'horizontal_line',
       price: h1p.price,
@@ -542,10 +686,10 @@ export function buildSnrMap({
         textcolor: STYLES.H1.color
       }
     });
-    if (entities.filter(e => e.timeframe === 'H1').length >= 4) break;
+    if (rawEntities.filter(e => e.timeframe === 'H1').length >= 4) break;
   }
 
-  // 5. Engulfing checks across closed bars (EB / ES)
+  // 5. Engulfing checks across closed bars (EB / ES) - Drawing coordinates use ONLY closed bar close
   for (const { tf, bars } of [
     { tf: 'H1', bars: closedH1Bars },
     { tf: 'H4', bars: closedH4Bars },
@@ -554,12 +698,13 @@ export function buildSnrMap({
     if (bars.length >= 2) {
       const prevBar = bars[bars.length - 2];
       const currBar = bars[bars.length - 1];
-      if (currBar?.time == null || !Number.isFinite(currBar.time)) continue;
+      if (currBar?.time == null || !Number.isFinite(currBar.time) || currBar.close == null || !Number.isFinite(currBar.close)) continue;
       const type = detectEngulfing(prevBar, currBar);
       if (type) {
-        const price = Number((type === 'EB' ? (currBar.low ?? currBar.close) : (currBar.high ?? currBar.close)).toFixed(2));
+        const price = Number(currBar.close.toFixed(2));
+        const extremePrice = Number((type === 'EB' ? (currBar.low ?? currBar.close) : (currBar.high ?? currBar.close)).toFixed(2));
         const label = `[${tf} - ${type} @ ${price.toFixed(2)}] (AI)`;
-        entities.push({
+        rawEntities.push({
           kind: 'horizontal_line',
           shape: 'horizontal_line',
           price,
@@ -567,6 +712,7 @@ export function buildSnrMap({
           reason: type,
           tags: [tf, type, 'ENGULFING'],
           point: { time: currBar.time, price },
+          extremePrice,
           label,
           overrides: {
             linecolor: STYLES[tf]?.color || STYLES.H1.color,
@@ -587,29 +733,38 @@ export function buildSnrMap({
     ...detectTrendlines(h1Pivots, closedH1Bars, STYLES.H1)
   ];
   for (const tl of trendlines) {
-    entities.push(tl);
+    rawEntities.push(tl);
   }
 
-  // 7. Real Ranges / Boxes & 50% Equilibrium Line
+  // 7. Real Ranges / Boxes (Enforce max width 20 points) & 50% Equilibrium Line
   const ranges = detectRanges(h4Bars);
   for (const r of ranges) {
-    entities.push(r);
+    let rect = { ...r };
+    if (rect.high - rect.low > 20.0) {
+      const eq = rect.equilibrium ?? Number(((rect.high + rect.low) / 2).toFixed(2));
+      rect.high = Number((eq + 10.0).toFixed(2));
+      rect.low = Number((eq - 10.0).toFixed(2));
+      rect.point = { ...rect.point, price: rect.high };
+      rect.point2 = { ...rect.point2, price: rect.low };
+      rect.label = `[Range ${rect.low.toFixed(1)} - ${rect.high.toFixed(1)} | Eq ${eq.toFixed(1)}] (AI)`;
+    }
+    rawEntities.push(rect);
     if (
-      r.equilibrium != null &&
-      Number.isFinite(r.equilibrium) &&
-      r.point?.time != null &&
-      Number.isFinite(r.point.time)
+      rect.equilibrium != null &&
+      Number.isFinite(rect.equilibrium) &&
+      rect.point?.time != null &&
+      Number.isFinite(rect.point.time)
     ) {
-      const eqPrice = Number(r.equilibrium.toFixed(2));
+      const eqPrice = Number(rect.equilibrium.toFixed(2));
       const eqLabel = `[Range 50% Eq @ ${eqPrice.toFixed(2)}] (AI)`;
-      entities.push({
+      rawEntities.push({
         kind: 'horizontal_line',
         shape: 'horizontal_line',
         price: eqPrice,
         timeframe: 'H4',
         reason: 'RANGE_EQ',
         tags: ['RANGE_EQ', 'RANGE', 'EQUILIBRIUM'],
-        point: { time: r.point.time, price: eqPrice },
+        point: { time: rect.point.time, price: eqPrice },
         label: eqLabel,
         overrides: {
           linecolor: STYLES.RANGE.border,
@@ -626,20 +781,25 @@ export function buildSnrMap({
   // 8. Real Delta Volume Reversal Finder labels
   const deltaEntities = parseDeltaLabels(deltaLabels);
   for (const d of deltaEntities) {
-    entities.push({
+    rawEntities.push({
       ...d,
       point: { time: d.time, price: d.price }
     });
   }
 
-  // 9. Generate compact note ONLY if evidence exists
+  // 9. Final deterministic global horizontal-line canonical dedup/clustering pass with a 4.0 price-point threshold
+  const nonHorizontal = rawEntities.filter(e => e.kind !== 'horizontal_line');
+  const horizontal = rawEntities.filter(e => e.kind === 'horizontal_line');
+  const clusteredHorizontal = clusterHorizontalLines(horizontal, 4.0);
+  let entities = [...nonHorizontal, ...clusteredHorizontal];
+
+  // 10. Generate compact note ONLY if evidence exists - starting with [📌 XAUUSD AI Brief] (AI)
   let note = null;
   if (entities.length > 0) {
     const anchor = entities.find(e => e.point && Number.isFinite(e.point.time) && Number.isFinite(e.point.price));
     if (anchor) {
-    // Keep the note at the current chart edge while retaining an evidence-backed price.
-    // A historical pivot timestamp can place an otherwise valid note off-screen.
-    const anchorPoint = { time: nowSec, price: anchor.point.price };
+      // Keep the note at the current chart edge while retaining an evidence-backed price.
+      const anchorPoint = { time: nowSec, price: anchor.point.price };
 
       let dailyRegime = 'Daily: Neutral / Consolidating';
       if (dPivots.length > 0) {
@@ -683,7 +843,8 @@ export function buildSnrMap({
         condStatement = `Invalidation: Break below ${supp.toFixed(1)} or above ${res.toFixed(1)} shifts bias`;
       }
 
-      const noteLines = [dailyRegime, h4Structure, h1Direction, condStatement];
+      const noteHeader = '[📌 XAUUSD AI Brief] (AI)';
+      const noteLines = [noteHeader, dailyRegime, h4Structure, h1Direction, condStatement];
       note = noteLines.join('\n');
 
       entities.push({
@@ -704,30 +865,19 @@ export function buildSnrMap({
     }
   }
 
-  const payloadForHash = {
-    schema_version: SCHEMA_VERSION,
-    symbol: 'OANDA:XAUUSD',
+  // The brief is appended after the first clustering pass. Canonicalize once
+  // more at the serialization boundary so no future entity construction can
+  // leak a sub-4-point horizontal pair into the persisted receipt.
+  entities = [
+    ...entities.filter(e => e.kind !== 'horizontal_line'),
+    ...clusterHorizontalLines(entities.filter(e => e.kind === 'horizontal_line'), 4.0)
+  ];
+
+  const manifest_hash = hashSnrMapEntities({
     generated_at_sec: nowSec,
     quote_price: quotePrice,
-    entity_count: entities.length,
-    entities: entities.map(e => ({
-      kind: e.kind ?? null,
-      shape: e.shape ?? null,
-      timeframe: e.timeframe ?? null,
-      reason: e.reason ?? null,
-      tags: e.tags ?? [],
-      point: e.point ?? null,
-      point2: e.point2 ?? null,
-      price: e.price ?? null,
-      high: e.high ?? null,
-      low: e.low ?? null,
-      equilibrium: e.equilibrium ?? null,
-      label: e.label ?? null,
-      overrides: e.overrides ?? {}
-    }))
-  };
-
-  const manifest_hash = hashManifest(payloadForHash);
+    entities
+  });
 
   const manifest = {
     schema_version: SCHEMA_VERSION,

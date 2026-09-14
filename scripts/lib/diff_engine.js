@@ -10,11 +10,22 @@
 
 export const DEFAULT_TOLERANCE_PTS = 1.0;
 
+function getEntityKind(e) {
+  if (!e) return null;
+  if (e.kind) return e.kind;
+  if (e.shape) return e.shape;
+  if (e.high != null && e.low != null) return 'rectangle';
+  if (e.price != null && !e.label?.includes('\n')) return 'horizontal_line';
+  if (e.label) return 'text';
+  return null;
+}
+
 /**
  * Match a candidate horizontal line against an existing horizontal line.
  */
 function matchHorizontalLine(cand, exist, tolerance = DEFAULT_TOLERANCE_PTS) {
-  if (exist.kind !== 'horizontal_line') return false;
+  const existKind = getEntityKind(exist);
+  if (existKind !== 'horizontal_line') return false;
   const candPrice = cand.point?.price ?? cand.price;
   const existPrice = exist.point?.price ?? exist.price;
   if (typeof candPrice !== 'number' || typeof existPrice !== 'number') return false;
@@ -25,11 +36,12 @@ function matchHorizontalLine(cand, exist, tolerance = DEFAULT_TOLERANCE_PTS) {
  * Match a candidate rectangle (Range) against an existing rectangle.
  */
 function matchRectangle(cand, exist, tolerance = DEFAULT_TOLERANCE_PTS) {
-  if (exist.kind !== 'rectangle') return false;
-  const cP1 = cand.point?.price;
-  const cP2 = cand.point2?.price;
-  const eP1 = exist.point?.price;
-  const eP2 = exist.point2?.price;
+  const existKind = getEntityKind(exist);
+  if (existKind !== 'rectangle') return false;
+  const cP1 = cand.point?.price ?? cand.high;
+  const cP2 = cand.point2?.price ?? cand.low;
+  const eP1 = exist.point?.price ?? exist.high;
+  const eP2 = exist.point2?.price ?? exist.low;
   if (cP1 == null || cP2 == null || eP1 == null || eP2 == null) return false;
 
   const cMin = Math.min(cP1, cP2);
@@ -44,7 +56,8 @@ function matchRectangle(cand, exist, tolerance = DEFAULT_TOLERANCE_PTS) {
  * Match a candidate trendline against an existing trendline.
  */
 function matchTrendLine(cand, exist, tolerance = DEFAULT_TOLERANCE_PTS) {
-  if (exist.kind !== 'trend_line') return false;
+  const existKind = getEntityKind(exist);
+  if (existKind !== 'trend_line') return false;
   const cP1 = cand.point?.price;
   const cP2 = cand.point2?.price;
   const eP1 = exist.point?.price;
@@ -59,7 +72,8 @@ function matchTrendLine(cand, exist, tolerance = DEFAULT_TOLERANCE_PTS) {
  * If text content is identical, keep it. If content changed, replace it (delete + append).
  */
 function matchTextNote(cand, exist) {
-  if (exist.kind !== 'text') return false;
+  const existKind = getEntityKind(exist);
+  if (existKind !== 'text') return false;
   const cText = cand.label || cand.overrides?.text || '';
   const eText = exist.label || exist.overrides?.text || '';
   return cText === eText && cText.length > 0;
@@ -70,9 +84,11 @@ function matchTextNote(cand, exist) {
  */
 export function isEntityMatch(cand, exist, tolerance = DEFAULT_TOLERANCE_PTS) {
   if (!cand || !exist) return false;
-  if (cand.kind !== exist.kind) return false;
+  const candKind = getEntityKind(cand);
+  const existKind = getEntityKind(exist);
+  if (candKind !== existKind) return false;
 
-  switch (cand.kind) {
+  switch (candKind) {
     case 'horizontal_line':
       return matchHorizontalLine(cand, exist, tolerance);
     case 'rectangle':

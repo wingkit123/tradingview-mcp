@@ -73,4 +73,11 @@ export function registerChartTools(server) {
     try { return jsonResult(await core.symbolSearch({ query, type })); }
     catch (err) { return jsonResult({ success: false, error: err.message }, true); }
   });
+
+  server.tool('chart_save', 'Request a chart save (Ctrl+S) and verify UI confirmation from the active target', {
+    timeout_ms: z.coerce.number().optional().default(5000).describe('Timeout in milliseconds to wait for save acknowledgement (default 5000)'),
+  }, async ({ timeout_ms }) => {
+    try { return jsonResult(await core.saveAndVerify({ timeoutMs: timeout_ms })); }
+    catch (err) { return jsonResult({ success: false, error: err.message }, true); }
+  });
 }

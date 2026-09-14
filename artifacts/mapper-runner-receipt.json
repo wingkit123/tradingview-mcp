@@ -1,0 +1,71 @@
+{
+    "status":  "PASS",
+    "mode":  "diff",
+    "failure_stage":  "complete",
+    "error":  null,
+    "exit_code":  0,
+    "started_at_utc":  "2026-09-14T16:59:19.4372547Z",
+    "completed_at_utc":  "2026-09-14T16:59:30.7753227Z",
+    "target_identity":  {
+                            "expected_chart_id":  "1xfXpF1b",
+                            "expected_symbol":  "OANDA:XAUUSD",
+                            "expected_chart_url":  null,
+                            "actual":  {
+                                           "verified":  true,
+                                           "symbol":  "OANDA:XAUUSD",
+                                           "resolution":  "5",
+                                           "chartType":  1,
+                                           "chartId":  "1xfXpF1b",
+                                           "url":  "https://www.tradingview.com/chart/1xfXpF1b/",
+                                           "layoutId":  null
+                                       }
+                        },
+    "timeframe_verification":  {
+                                   "W":  {
+                                             "verified":  true,
+                                             "timeframe":  "1W",
+                                             "bar_count":  99,
+                                             "median_cadence_sec":  604800,
+                                             "nominal_sec":  604800
+                                         },
+                                   "D":  {
+                                             "verified":  true,
+                                             "timeframe":  "1D",
+                                             "bar_count":  149,
+                                             "median_cadence_sec":  86400,
+                                             "nominal_sec":  86400
+                                         },
+                                   "H4":  {
+                                              "verified":  true,
+                                              "timeframe":  "240",
+                                              "bar_count":  149,
+                                              "median_cadence_sec":  14400,
+                                              "nominal_sec":  14400
+                                          },
+                                   "H1":  {
+                                              "verified":  true,
+                                              "timeframe":  "60",
+                                              "bar_count":  199,
+                                              "median_cadence_sec":  3600,
+                                              "nominal_sec":  3600
+                                          }
+                               },
+    "chart_save":  {
+                       "status":  "verified",
+                       "verified_by":  "same_cdp_connector",
+                       "pre_commit":  {
+                                          "success":  true,
+                                          "supported":  true,
+                                          "status":  "verified",
+                                          "evidence":  "ui_saved_acknowledgement"
+                                      },
+                       "post_commit":  {
+                                           "success":  true,
+                                           "supported":  true,
+                                           "status":  "verified",
+                                           "evidence":  "ui_saved_acknowledgement"
+                                       }
+                   },
+    "manifest_hash":  "65c51373708b6d64d16a3c94f17e1ce5e5c0894405c722d58b850249a76c3b1f",
+    "quote_price":  4315.265
+}

@@ -131,4 +131,47 @@ describe('Diff Engine — Differential SNR Lifecycle Actions', () => {
     assert.equal(diff.append.length, 2);
     assert.equal(diff.delete.length, 0);
   });
+
+  it('matches legacy entity formats without explicit kind property', () => {
+    const existingLegacy = [
+      {
+        entity_id: 'leg-line-1',
+        price: 4434.93,
+        label: '[W Resistance @ 4434.93] (AI)'
+      },
+      {
+        entity_id: 'leg-rect-1',
+        shape: 'rectangle',
+        high: 4405,
+        low: 4390,
+        label: '[Sell Zone 1] (AI)'
+      }
+    ];
+
+    const candidates = [
+      {
+        kind: 'horizontal_line',
+        shape: 'horizontal_line',
+        price: 4434.93,
+        point: { price: 4434.93, time: 1000 },
+        label: '[W Resistance @ 4434.93] (AI)'
+      },
+      {
+        kind: 'rectangle',
+        shape: 'rectangle',
+        high: 4405,
+        low: 4390,
+        point: { price: 4405, time: 1000 },
+        point2: { price: 4390, time: 2000 },
+        label: '[Sell Zone 1] (AI)'
+      }
+    ];
+
+    const diff = computeEntityDiff(candidates, existingLegacy, { tolerance: 1.0 });
+    assert.equal(diff.keep.length, 2);
+    assert.equal(diff.keep[0].entity_id, 'leg-line-1');
+    assert.equal(diff.keep[1].entity_id, 'leg-rect-1');
+    assert.equal(diff.append.length, 0);
+    assert.equal(diff.delete.length, 0);
+  });
 });

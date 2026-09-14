@@ -15,8 +15,9 @@ import { getClient, reconnectTo, CDP_HOST, CDP_PORT } from '../connection.js';
 /**
  * List all open chart tabs (CDP page targets).
  */
-export async function list() {
-  const resp = await fetch(`http://${CDP_HOST}:${CDP_PORT}/json/list`);
+export async function list({ _deps } = {}) {
+  const fetchFn = _deps?.fetch || fetch;
+  const resp = await fetchFn(`http://${CDP_HOST}:${CDP_PORT}/json/list`);
   const targets = await resp.json();
 
   // Chart tabs plus new-tab landing pages (layout picker), so every tab in the
@@ -33,6 +34,25 @@ export async function list() {
     }));
 
   return { success: true, tab_count: tabs.length, tabs };
+}
+
+/**
+ * Validate that a URL is a valid string with http: or https: protocol.
+ */
+export function validateUrl(url) {
+  if (typeof url !== 'string' || !url.trim()) {
+    throw new Error('URL must be a non-empty string.');
+  }
+  let parsed;
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw new Error(`Invalid URL format: "${url}"`);
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    throw new Error(`Invalid URL protocol "${parsed.protocol}". Only http: and https: protocols are allowed.`);
+  }
+  return parsed.href;
 }
 
 /**
@@ -319,4 +339,72 @@ export async function switchTab({ index }) {
   }
 
   return { success: true, action: 'switched', index: idx, tab_id: target.id, chart_id: target.chart_id, visually_switched: true };
+}
+
+/**
+ * Navigate an existing chart tab to a URL by numeric index.
+ * Reconnects the cached CDP client to that target, enables Page if needed,
+ * and calls client.Page.navigate({ url }).
+ */
+export async function navigate({ url, index = 0, _deps } = {}) {
+  const validatedUrl = validateUrl(url);
+
+  const deps = {
+    list,
+    reconnectTo,
+    ..._deps,
+  };
+
+  const tabsResult = await deps.list({ _deps });
+  const tabs = tabsResult?.tabs || [];
+  const tabCount = tabsResult?.tab_count ?? tabs.length;
+
+  const idx = Number(index ?? 0);
+  if (!Number.isInteger(idx) || idx < 0 || idx >= tabCount) {
+    throw new Error(`Tab index ${index ?? idx} out of range (have ${tabCount} tabs)`);
+  }
+
+  const target = tabs[idx];
+  if (!target || !target.id) {
+    throw new Error(`Target tab not found at index ${idx}`);
+  }
+
+  const client = await deps.reconnectTo(target.id);
+  if (!client) {
+    throw new Error(`Failed to reconnect CDP client to target ${target.id}`);
+  }
+
+  if (client.Page && typeof client.Page.enable === 'function') {
+    await client.Page.enable();
+  }
+
+  if (!client.Page || typeof client.Page.navigate !== 'function') {
+    throw new Error('CDP Page domain or navigate method not available');
+  }
+
+  const navResult = await client.Page.navigate({ url: validatedUrl });
+  if (!navResult || typeof navResult !== 'object') {
+    throw new Error('Page.navigate failed: empty or invalid response from CDP');
+  }
+  if (navResult.errorText) {
+    throw new Error(`Page.navigate failed: ${navResult.errorText}`);
+  }
+
+  return {
+    success: true,
+    action: 'navigated',
+    url: validatedUrl,
+    index: idx,
+    tab_id: target.id,
+    chart_id: target.chart_id || null,
+    frame_id: navResult.frameId || null,
+    loader_id: navResult.loaderId || null,
+    target: {
+      id: target.id,
+      title: target.title,
+      url: target.url,
+      chart_id: target.chart_id || null,
+      is_chart: target.is_chart ?? false,
+    },
+  };
 }

@@ -157,6 +157,17 @@ describe('chart.js — sanitized evaluate calls', () => {
     assert.ok(call.includes('"15"'), 'timeframe wrapped via safeString');
   });
 
+  it('setTimeframe waits for the requested resolution instead of returning a fixed-delay ready flag', async () => {
+    const { _deps } = mockDeps();
+    let waitArgs;
+    _deps.waitForChartReady = async (...args) => {
+      waitArgs = args;
+      return true;
+    };
+    await setTimeframe({ timeframe: '1W', _deps });
+    assert.deepEqual(waitArgs, [null, '1W']);
+  });
+
   it('setType validates chart type range 0-9', async () => {
     const { _deps } = mockDeps();
     // Valid names

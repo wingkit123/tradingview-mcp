@@ -37,4 +37,18 @@ export function registerDrawingTools(server) {
     try { return jsonResult(await core.getProperties({ entity_id })); }
     catch (err) { return jsonResult({ success: false, error: err.message }, true); }
   });
+
+  server.tool('draw_snapshot_shape', 'Take a recoverable snapshot of a drawing by entity ID', {
+    entity_id: z.string().describe('Entity ID of the drawing to snapshot'),
+  }, async ({ entity_id }) => {
+    try { return jsonResult(await core.snapshotShape({ entity_id })); }
+    catch (err) { return jsonResult({ success: false, error: err.message }, true); }
+  });
+
+  server.tool('draw_restore_shape', 'Restore a previously snapshotted drawing', {
+    snapshot: z.record(z.any()).describe('Snapshot object returned by draw_snapshot_shape or active entity object'),
+  }, async ({ snapshot }) => {
+    try { return jsonResult(await core.restoreShape({ snapshot })); }
+    catch (err) { return jsonResult({ success: false, error: err.message }, true); }
+  });
 }

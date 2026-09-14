@@ -80,3 +80,11 @@ register('ui-state', {
   description: 'Get current UI state (panels, buttons)',
   handler: () => healthCore.uiState(),
 });
+
+register('save', {
+  description: 'Request a chart save (Ctrl+S) and verify UI acknowledgement',
+  options: {
+    timeout: { type: 'string', description: 'Timeout in milliseconds (default 5000)' },
+  },
+  handler: (opts) => core.saveAndVerify({ timeoutMs: opts?.timeout ? Number(opts.timeout) : 5000 }),
+});

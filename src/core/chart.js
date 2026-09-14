@@ -1,8 +1,8 @@
 /**
  * Core chart control logic.
  */
-import { evaluate as _evaluate, evaluateAsync as _evaluateAsync, safeString, requireFinite } from '../connection.js';
-import { waitForChartReady as _waitForChartReady } from '../wait.js';
+import { evaluate as _evaluate, evaluateAsync as _evaluateAsync, getClient as _getClient, safeString, requireFinite } from '../connection.js';
+import { waitForChartReady as _waitForChartReady, normalizeResolution } from '../wait.js';
 
 const CHART_API = 'window.TradingViewApi._activeChartWidgetWV.value()';
 
@@ -10,6 +10,7 @@ function _resolve(deps) {
   return {
     evaluate: deps?.evaluate || _evaluate,
     evaluateAsync: deps?.evaluateAsync || _evaluateAsync,
+    getClient: deps?.getClient || _getClient,
     waitForChartReady: deps?.waitForChartReady || _waitForChartReady,
   };
 }
@@ -30,6 +31,8 @@ export async function getState({ _deps } = {}) {
         symbol: chart.symbol(),
         resolution: chart.resolution(),
         chartType: chart.chartType(),
+        url: window.location.href,
+        chartId: (window.location.href.match(new RegExp('/chart/([^/?]+)', 'i')) || [])[1] || null,
         studies: studies,
       };
     })()
@@ -54,6 +57,22 @@ export async function setSymbol({ symbol, _deps }) {
 
 export async function setTimeframe({ timeframe, _deps }) {
   const { evaluate, waitForChartReady } = _resolve(_deps);
+
+  const currentResolution = await evaluate(`
+    (function() {
+      try {
+        var chart = ${CHART_API};
+        return chart.resolution();
+      } catch(e) {
+        return null;
+      }
+    })()
+  `);
+
+  if (currentResolution && normalizeResolution(currentResolution) === normalizeResolution(timeframe)) {
+    return { success: true, timeframe, chart_ready: true };
+  }
+
   await evaluate(`
     (function() {
       var chart = ${CHART_API};
@@ -61,7 +80,10 @@ export async function setTimeframe({ timeframe, _deps }) {
     })()
   `);
   const ready = await waitForChartReady(null, timeframe);
-  return { success: true, timeframe, chart_ready: ready };
+  if (!ready) {
+    throw new Error(`Chart timeframe did not become ready for "${timeframe}"`);
+  }
+  return { success: true, timeframe, chart_ready: true };
 }
 
 export async function setType({ chart_type, _deps }) {
@@ -82,6 +104,44 @@ export async function setType({ chart_type, _deps }) {
     })()
   `);
   return { success: true, chart_type, type_num: typeNum };
+}
+
+/**
+ * Request a chart save through the active CDP target and require explicit UI
+ * acknowledgement from that same target. Absence of acknowledgement is not a
+ * successful save: callers must fail closed instead of reporting sync.
+ */
+export async function saveAndVerify({ timeoutMs = 5000, _deps } = {}) {
+  const { evaluate, getClient } = _resolve(_deps);
+  const before = await getState({ _deps });
+  const client = await getClient();
+  await client.Input.dispatchKeyEvent({ type: 'keyDown', modifiers: 2, key: 's', code: 'KeyS', windowsVirtualKeyCode: 83 });
+  await client.Input.dispatchKeyEvent({ type: 'keyUp', key: 's', code: 'KeyS', windowsVirtualKeyCode: 83 });
+
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const acknowledgement = await evaluate(`
+      (function() {
+        var aria = Array.from(document.querySelectorAll('[aria-label]'))
+          .map(function(el) { return el.getAttribute('aria-label') || ''; })
+          .join(' ');
+        var text = ((document.body && document.body.innerText || '') + ' ' + aria).replace(/\\s+/g, ' ');
+        return {
+          saving: /\\bsaving(?: chart| layout)?\\b/i.test(text),
+          saved: /\\b(?:all changes saved|chart saved|layout saved)\\b/i.test(text)
+        };
+      })()
+    `);
+    if (acknowledgement?.saved && !acknowledgement?.saving) {
+      const after = await getState({ _deps });
+      if (after.chartId !== before.chartId || after.symbol !== before.symbol) {
+        throw new Error('Chart identity changed while verifying save');
+      }
+      return { success: true, supported: true, status: 'verified', evidence: 'ui_saved_acknowledgement' };
+    }
+    await new Promise(resolve => setTimeout(resolve, 200));
+  }
+  throw new Error('Chart save could not be verified by the active CDP target');
 }
 
 export async function manageIndicator({ action, indicator, entity_id, inputs: inputsRaw, _deps }) {

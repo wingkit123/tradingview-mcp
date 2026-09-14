@@ -4,6 +4,7 @@ import {
   SCHEMA_VERSION,
   canonicalizeJson,
   hashManifest,
+  hashSnrMapEntities,
   detectPivots,
   detectEngulfing,
   detectSbrRbs,
@@ -35,6 +36,17 @@ describe('SNR Map Builder v1 — Pure Evidence & Closed Bar Module', () => {
       };
       const hash = hashManifest(payload);
       assert.match(hash, /^[0-9a-f]{64}$/);
+    });
+
+    it('hashes the exact receipt entity projection, including the active entity count', () => {
+      const receipt = {
+        generated_at_sec: 1700000000,
+        quote_price: 3000,
+        entities: [{ kind: 'horizontal_line', shape: 'horizontal_line', price: 3000 }]
+      };
+      const hash = hashSnrMapEntities(receipt);
+      assert.match(hash, /^[0-9a-f]{64}$/);
+      assert.notEqual(hash, hashSnrMapEntities({ ...receipt, entities: [] }));
     });
 
     it('alters manifest_hash when any entity property or override is mutated', () => {
@@ -454,16 +466,17 @@ describe('SNR Map Builder v1 — Pure Evidence & Closed Bar Module', () => {
       assert.notEqual(noteEntity.overrides?.backgroundColor, 'rgba(255, 255, 255, 0.90)');
       assert.equal(noteEntity.overrides?.fillBackground, false);
 
-      // Max 4 evidence-derived lines
+      // Note starts with [📌 XAUUSD AI Brief] (AI) followed by evidence-derived lines
       const lines = noteEntity.label.split('\n');
-      assert.ok(lines.length <= 4, `Expected <= 4 lines, got ${lines.length}`);
+      assert.equal(lines[0], '[📌 XAUUSD AI Brief] (AI)', 'Note must start with required AI Brief header');
+      assert.ok(lines.length <= 5, `Expected <= 5 lines, got ${lines.length}`);
       assert.ok(lines.some(l => /Daily|D:/i.test(l)), 'Contains Daily regime');
       assert.ok(lines.some(l => /H4/i.test(l)), 'Contains H4 structure');
       assert.ok(lines.some(l => /H1/i.test(l)), 'Contains H1 direction');
       assert.ok(lines.some(l => /Invalidation|Cond|Bias/i.test(l)), 'Contains Invalidation/Conditional');
     });
 
-    it('sets fourth line to "Invalidation: INSUFFICIENT_EVIDENCE" when either above or below structural key levels are absent', () => {
+    it('sets invalidation line to "Invalidation: INSUFFICIENT_EVIDENCE" when either above or below structural key levels are absent', () => {
       // Setup bars that only produce levels below quote (3000), within quote +/- 50 (quote = 3020, range [2970, 3070])
       const wBars = [
         { time: 100, open: 2980, high: 2990, low: 2975, close: 2985 },
@@ -484,12 +497,13 @@ describe('SNR Map Builder v1 — Pure Evidence & Closed Bar Module', () => {
       const noteEntity = map.entities.find(e => e.kind === 'text');
       assert.ok(noteEntity, 'Note entity should exist');
       const lines = noteEntity.label.split('\n');
-      assert.equal(lines[3], 'Invalidation: INSUFFICIENT_EVIDENCE');
+      assert.equal(lines[0], '[📌 XAUUSD AI Brief] (AI)');
+      assert.equal(lines[4], 'Invalidation: INSUFFICIENT_EVIDENCE');
       assert.equal(noteEntity.label.includes('3060.0'), false, 'Must not use quotePrice + 10 fallback');
       assert.equal(noteEntity.label.includes('3040.0'), false, 'Must not use quotePrice - 10 fallback');
     });
 
-    it('sets fourth line to "Invalidation: INSUFFICIENT_EVIDENCE" when no horizontal levels exist at all', () => {
+    it('sets invalidation line to "Invalidation: INSUFFICIENT_EVIDENCE" when no horizontal levels exist at all', () => {
       // Rectangle only (no horizontal lines)
       const h4Bars = [
         { time: 100, open: 2980, high: 3020, low: 2970, close: 3018 },
@@ -508,7 +522,8 @@ describe('SNR Map Builder v1 — Pure Evidence & Closed Bar Module', () => {
       const noteEntity = map.entities.find(e => e.kind === 'text');
       assert.ok(noteEntity);
       const lines = noteEntity.label.split('\n');
-      assert.equal(lines[3], 'Invalidation: INSUFFICIENT_EVIDENCE');
+      assert.equal(lines[0], '[📌 XAUUSD AI Brief] (AI)');
+      assert.equal(lines[4], 'Invalidation: INSUFFICIENT_EVIDENCE');
     });
 
     it('uses actual entity timestamps and eliminates Date.now/nowSec fallback on detector output entities', () => {

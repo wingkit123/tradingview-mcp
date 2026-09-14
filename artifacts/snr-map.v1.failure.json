@@ -1,0 +1,69 @@
+{
+  "schema_version": "snr-map.v1",
+  "status": "FAILED",
+  "mode": "force-refresh",
+  "failure_stage": "retirement_preflight",
+  "errors": [
+    {
+      "message": "Retirement target \"7Y3uDk\" is unavailable before mutation: JS evaluation error: Error: There is no such shape\n    at wt.getShapeById (https://static.tradingview.com/static/bundles/36940.8d48b4ee2c41b4ea41f6.js:79:1481)\n    at <anonymous>:6:23\n    at <anonymous>:22:7"
+    }
+  ],
+  "manifest_hash": "57225aab62961e11949a6e0cf025057823900685db0fa3e3e1a3c54f7e3c2d79",
+  "previous_manifest_hash": "57225aab62961e11949a6e0cf025057823900685db0fa3e3e1a3c54f7e3c2d79",
+  "mutation_performed": false,
+  "rollback_attempted": true,
+  "rollback_verified": true,
+  "rollback_error": null,
+  "target_verification": {
+    "verified": true,
+    "symbol": "OANDA:XAUUSD",
+    "resolution": "5",
+    "chartType": 1,
+    "chartId": "1xfXpF1b",
+    "url": "https://www.tradingview.com/chart/1xfXpF1b/",
+    "layoutId": null
+  },
+  "timeframe_verification": {
+    "W": {
+      "verified": true,
+      "timeframe": "1W",
+      "bar_count": 99,
+      "median_cadence_sec": 604800,
+      "nominal_sec": 604800
+    },
+    "D": {
+      "verified": true,
+      "timeframe": "1D",
+      "bar_count": 149,
+      "median_cadence_sec": 86400,
+      "nominal_sec": 86400
+    },
+    "H4": {
+      "verified": true,
+      "timeframe": "240",
+      "bar_count": 149,
+      "median_cadence_sec": 14400,
+      "nominal_sec": 14400
+    },
+    "H1": {
+      "verified": true,
+      "timeframe": "60",
+      "bar_count": 199,
+      "median_cadence_sec": 3600,
+      "nominal_sec": 3600
+    }
+  },
+  "chart_save": {
+    "status": "unverified",
+    "verified_by": null,
+    "pre_commit": {
+      "supported": false,
+      "status": "unverified"
+    },
+    "post_commit": {
+      "supported": false,
+      "status": "unverified"
+    }
+  },
+  "generated_at_utc": "2026-09-14T16:53:06.569Z"
+}

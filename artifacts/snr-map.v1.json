@@ -1,115 +1,300 @@
 {
   "schema_version": "snr-map.v1",
+  "manifest_hash": "65c51373708b6d64d16a3c94f17e1ce5e5c0894405c722d58b850249a76c3b1f",
   "symbol": "OANDA:XAUUSD",
-  "updated_at_utc": "2026-09-07T15:52:25.312Z",
-  "quote_price": 4387.34,
-  "ai_entity_count": 12,
-  "entity_ids": [
-    "3YmiNc",
-    "sN7kEH",
-    "3b2Lyu",
-    "k9BrHZ",
-    "UC3cBe",
-    "deTTLq",
-    "KqZ6dK",
-    "HSVATB",
-    "ywk7Wj",
-    "meIbxl",
-    "S05lrA",
-    "sBIoDC"
+  "generated_at_sec": 1789405162,
+  "quote_price": 4315.265,
+  "mode": "diff",
+  "mutation_performed": false,
+  "created_entity_ids": [],
+  "retired_entity_ids": [],
+  "kept_entity_ids": [
+    "KRg0hD",
+    "OT9ByO",
+    "K4WU1W",
+    "XDyzR4",
+    "wESkAe",
+    "ys5x8Q",
+    "5kBvsd",
+    "tYoD9C"
   ],
-  "active_entities": [
+  "diff_summary": {
+    "keep_count": 8,
+    "append_count": 0,
+    "delete_count": 0
+  },
+  "entity_count": 8,
+  "entities": [
     {
-      "entity_id": "3YmiNc",
-      "price": 4434.93,
-      "label": "[W Resistance + D Resistance (delta buy) @ 4434.93] (AI)",
-      "color": "#1A237E",
-      "width": 2,
-      "style": 0
+      "entity_id": "KRg0hD",
+      "kind": "trend_line",
+      "shape": "trend_line",
+      "reason": "TL_SETUP",
+      "point": {
+        "time": 1789347600,
+        "price": 4353.35
+      },
+      "point2": {
+        "time": 1789362000,
+        "price": 4337.4
+      },
+      "tags": [
+        "TREND_LINE",
+        "TL_SETUP",
+        "RESISTANCE_TL"
+      ],
+      "label": "[TL_SETUP Resistance Retest/Reject] (AI)",
+      "overrides": {
+        "linecolor": "#B8860B",
+        "linewidth": 2,
+        "linestyle": 0
+      }
     },
     {
-      "entity_id": "sN7kEH",
-      "price": 4427.35,
-      "label": "[W SBR + D SBR (delta sell) @ 4427.35] (AI)",
-      "color": "#1A237E",
-      "width": 2,
-      "style": 0
+      "entity_id": "OT9ByO",
+      "kind": "text",
+      "shape": "text",
+      "point": {
+        "time": 1789405162,
+        "price": 4353.35
+      },
+      "tags": [
+        "NOTE"
+      ],
+      "label": "[📌 XAUUSD AI Brief] (AI)\nDaily: Support at 4328.40\nH4: Swing Resistance @ 4388.56\nH1: Demand Hold @ 4271.27\nInvalidation: Break below 4304.2 or above 4317.0 shifts bias",
+      "overrides": {
+        "text": "[📌 XAUUSD AI Brief] (AI)\nDaily: Support at 4328.40\nH4: Swing Resistance @ 4388.56\nH1: Demand Hold @ 4271.27\nInvalidation: Break below 4304.2 or above 4317.0 shifts bias",
+        "color": "#1565C0",
+        "fontsize": 10,
+        "bold": true,
+        "fillBackground": false,
+        "showLabel": true
+      }
     },
     {
-      "entity_id": "3b2Lyu",
-      "price": 4420.59,
-      "label": "[W SBR + D SBR (delta buy) @ 4420.59] (AI)",
-      "color": "#1A237E",
-      "width": 2,
-      "style": 0
+      "entity_id": "K4WU1W",
+      "kind": "horizontal_line",
+      "shape": "horizontal_line",
+      "price": 4304.19,
+      "timeframe": "H1",
+      "reason": "SBR",
+      "tags": [
+        "H1",
+        "SBR"
+      ],
+      "point": {
+        "time": 1789095600,
+        "price": 4304.19
+      },
+      "label": "[H1 - SBR @ 4304.19] (AI)",
+      "overrides": {
+        "linecolor": "#B8860B",
+        "linewidth": 2,
+        "linestyle": 0,
+        "showPrice": true,
+        "showLabel": true,
+        "textcolor": "#B8860B"
+      }
     },
     {
-      "entity_id": "k9BrHZ",
-      "price": 4416.58,
-      "label": "[W SBR + D ES (delta buy) @ 4416.58] (AI)",
-      "color": "#1A237E",
-      "width": 2,
-      "style": 0
+      "entity_id": "XDyzR4",
+      "kind": "horizontal_line",
+      "shape": "horizontal_line",
+      "price": 4317.02,
+      "timeframe": "H4",
+      "reason": "SBR",
+      "tags": [
+        "H4",
+        "SBR"
+      ],
+      "point": {
+        "time": 1789059600,
+        "price": 4317.02
+      },
+      "label": "[H4 - SBR @ 4317.02] (AI)",
+      "overrides": {
+        "linecolor": "#D32F2F",
+        "linewidth": 2,
+        "linestyle": 0,
+        "showPrice": true,
+        "showLabel": true,
+        "textcolor": "#D32F2F"
+      }
     },
     {
-      "entity_id": "UC3cBe",
-      "price": 4411.01,
-      "label": "[W Resistance + D ES @ 4411.01] (AI)",
-      "color": "#1A237E",
-      "width": 2,
-      "style": 0
+      "entity_id": "wESkAe",
+      "kind": "horizontal_line",
+      "shape": "horizontal_line",
+      "price": 4332.06,
+      "timeframe": "W",
+      "reason": "SBR",
+      "tags": [
+        "D",
+        "SBR",
+        "W"
+      ],
+      "point": {
+        "time": 1766959200,
+        "price": 4332.06
+      },
+      "label": "[W - SBR @ 4332.06] (AI)",
+      "overrides": {
+        "linecolor": "#000000",
+        "linewidth": 3,
+        "linestyle": 0,
+        "showPrice": true,
+        "showLabel": true,
+        "textcolor": "#000000"
+      },
+      "confluence_count": 2,
+      "confluence_timeframes": [
+        "D",
+        "W"
+      ],
+      "confluence_reasons": [
+        "SBR"
+      ]
     },
     {
-      "entity_id": "deTTLq",
-      "price": 4392.91,
-      "label": "[W SBR + D SBR @ 4392.91] (AI)",
-      "color": "#1A237E",
-      "width": 2,
-      "style": 0
+      "entity_id": "ys5x8Q",
+      "kind": "horizontal_line",
+      "shape": "horizontal_line",
+      "price": 4340.2,
+      "timeframe": "H1",
+      "reason": "SBR",
+      "tags": [
+        "H1",
+        "SBR"
+      ],
+      "point": {
+        "time": 1789041600,
+        "price": 4340.2
+      },
+      "label": "[H1 - SBR @ 4340.20] (AI)",
+      "overrides": {
+        "linecolor": "#B8860B",
+        "linewidth": 2,
+        "linestyle": 0,
+        "showPrice": true,
+        "showLabel": true,
+        "textcolor": "#B8860B"
+      }
     },
     {
-      "entity_id": "KqZ6dK",
-      "price": 4388.94,
-      "label": "[★Delta SellRev @ 4388.94] (AI)",
-      "color": "#E65100",
-      "width": 2,
-      "style": 2
+      "entity_id": "5kBvsd",
+      "kind": "horizontal_line",
+      "shape": "horizontal_line",
+      "price": 4355.7,
+      "timeframe": "H4",
+      "reason": "SBR",
+      "tags": [
+        "H1",
+        "H4",
+        "RBS",
+        "SBR"
+      ],
+      "point": {
+        "time": 1788886800,
+        "price": 4355.7
+      },
+      "label": "[H4 - SBR @ 4355.70] (AI)",
+      "overrides": {
+        "linecolor": "#D32F2F",
+        "linewidth": 2,
+        "linestyle": 0,
+        "showPrice": true,
+        "showLabel": true,
+        "textcolor": "#D32F2F"
+      },
+      "confluence_count": 2,
+      "confluence_timeframes": [
+        "H1",
+        "H4"
+      ],
+      "confluence_reasons": [
+        "RBS",
+        "SBR"
+      ]
     },
     {
-      "entity_id": "HSVATB",
-      "price": 4384.75,
-      "label": "[W Support + D RBS @ 4384.75] (AI)",
-      "color": "#1A237E",
-      "width": 2,
-      "style": 0
-    },
-    {
-      "entity_id": "ywk7Wj",
-      "price": 4378.26,
-      "label": "[W RBS (delta buy) @ 4378.26] (AI)",
-      "color": "#1A237E",
-      "width": 2,
-      "style": 0
-    },
-    {
-      "entity_id": "meIbxl",
-      "price": 4372.95,
-      "label": "[W RBS + D RBS (delta buy/sell) @ 4372.95] (AI)",
-      "color": "#1A237E",
-      "width": 2,
-      "style": 0
-    },
-    {
-      "entity_id": "S05lrA",
-      "price": 4356.29,
-      "label": "[W SBR + D SBR @ 4356.29] (AI)",
-      "color": "#1A237E",
-      "width": 2,
-      "style": 0
-    },
-    {
-      "entity_id": "sBIoDC",
-      "label": "📌 XAUUSD AI Private Analyst Brief (OANDA)\nMacro Trend: Weekly/Daily Bullish Momentum\nImmediate Support: 4384.75 | Immediate Resistance: 4388.94\nStructure: W/D Primary Anchors + Nested LTF (H4/H1) + Delta Volume Reversals\nSOP Guard: User drawings (without AI tag) strictly protected."
+      "entity_id": "tYoD9C",
+      "kind": "horizontal_line",
+      "shape": "horizontal_line",
+      "price": 4388.56,
+      "timeframe": "H4",
+      "reason": "Swing Resistance",
+      "tags": [
+        "H4",
+        "Swing Resistance"
+      ],
+      "point": {
+        "time": 1789117200,
+        "price": 4388.56
+      },
+      "label": "[H4 - Swing Resistance @ 4388.56] (AI)",
+      "overrides": {
+        "linecolor": "#D32F2F",
+        "linewidth": 2,
+        "linestyle": 0,
+        "showPrice": true,
+        "showLabel": true,
+        "textcolor": "#D32F2F"
+      }
     }
-  ]
+  ],
+  "target_verification": {
+    "verified": true,
+    "symbol": "OANDA:XAUUSD",
+    "resolution": "5",
+    "chartType": 1,
+    "chartId": "1xfXpF1b",
+    "url": "https://www.tradingview.com/chart/1xfXpF1b/",
+    "layoutId": null
+  },
+  "timeframe_verification": {
+    "W": {
+      "verified": true,
+      "timeframe": "1W",
+      "bar_count": 99,
+      "median_cadence_sec": 604800,
+      "nominal_sec": 604800
+    },
+    "D": {
+      "verified": true,
+      "timeframe": "1D",
+      "bar_count": 149,
+      "median_cadence_sec": 86400,
+      "nominal_sec": 86400
+    },
+    "H4": {
+      "verified": true,
+      "timeframe": "240",
+      "bar_count": 149,
+      "median_cadence_sec": 14400,
+      "nominal_sec": 14400
+    },
+    "H1": {
+      "verified": true,
+      "timeframe": "60",
+      "bar_count": 199,
+      "median_cadence_sec": 3600,
+      "nominal_sec": 3600
+    }
+  },
+  "chart_save": {
+    "status": "verified",
+    "verified_by": "same_cdp_connector",
+    "pre_commit": {
+      "success": true,
+      "supported": true,
+      "status": "verified",
+      "evidence": "ui_saved_acknowledgement"
+    },
+    "post_commit": {
+      "success": true,
+      "supported": true,
+      "status": "verified",
+      "evidence": "ui_saved_acknowledgement"
+    }
+  }
 }

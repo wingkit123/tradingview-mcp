@@ -34,4 +34,12 @@ export function registerTabTools(server) {
     try { return jsonResult(await core.switchTab({ index })); }
     catch (err) { return jsonResult({ success: false, error: err.message }, true); }
   });
+
+  server.tool('tab_navigate', 'Navigate an existing chart tab to a URL by numeric index', {
+    url: z.string().describe('URL to navigate to (must start with http:// or https://)'),
+    index: z.coerce.number().optional().default(0).describe('Tab index (0-based, from tab_list; default 0)'),
+  }, async ({ url, index }) => {
+    try { return jsonResult(await core.navigate({ url, index })); }
+    catch (err) { return jsonResult({ success: false, error: err.message }, true); }
+  });
 }

@@ -582,7 +582,7 @@ describe('User Drawing Pipeline v1 — Schema & Interface Specification', () => 
       assert.ok(existsSync(rawPath), 'user-drawings-v1.raw.json exists');
       assert.ok(existsSync(manifestPath), 'user-drawings-v1.manifest.json exists');
 
-      const rawContent = readFileSync(rawPath, 'utf8');
+      const rawContent = readFileSync(rawPath, 'utf8').replace(/\r\n/g, '\n');
       const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
 
       const calculatedFixtureSha256 = crypto.createHash('sha256').update(rawContent, 'utf8').digest('hex');
