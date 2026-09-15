@@ -50,6 +50,11 @@ export async function healthCheck() {
     (function() {
       var result = { url: window.location.href, title: document.title };
       try {
+        var btns = Array.from(document.querySelectorAll('button'));
+        var restoreBtn = btns.find(function(b) { return (b.textContent || '').includes('Restore connection'); });
+        if (restoreBtn) restoreBtn.click();
+      } catch(e) {}
+      try {
         var chart = window.TradingViewApi._activeChartWidgetWV.value();
         result.symbol = chart.symbol();
         result.resolution = chart.resolution();

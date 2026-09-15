@@ -79,10 +79,9 @@ export async function waitForChartReady(
   while (Date.now() - start < timeout) {
     const state = await evalFn(`
       (function() {
-        // Check for loading spinner
-        var spinner = document.querySelector('[class*="loader"]')
-          || document.querySelector('[class*="loading"]')
-          || document.querySelector('[data-name="loading"]');
+        // Check for chart loading spinner (target chart-level loading overlays, excluding legend elements)
+        var spinner = document.querySelector('.ch-loader, .chart-loading-screen, [class*="loading-overlay"]:not(.js-hidden), [data-name="loading"]')
+          || document.querySelector('.chart-container > [class*="loader"], .chart-widget > [class*="loader"]');
         var isLoading = spinner && spinner.offsetParent !== null;
 
         var barCount = -1;
@@ -204,9 +203,8 @@ export async function waitForChartRender(timeout = 5000) {
           symbol = chart.symbol();
           resolution = chart.resolution();
         } catch(e) {}
-        var spinner = document.querySelector('[class*="loader"]')
-          || document.querySelector('[class*="loading"]')
-          || document.querySelector('[data-name="loading"]');
+        var spinner = document.querySelector('.ch-loader, .chart-loading-screen, [class*="loading-overlay"]:not(.js-hidden), [data-name="loading"]')
+          || document.querySelector('.chart-container > [class*="loader"], .chart-widget > [class*="loader"]');
         return {
           symbol: symbol,
           resolution: resolution,

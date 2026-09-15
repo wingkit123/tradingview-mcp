@@ -526,8 +526,8 @@ async function fetchTimeframeBarsWithCadence({
   timeframe,
   count,
   sleepFn,
-  maxAttempts = 10,
-  pollDelayMs = 150
+  maxAttempts = 25,
+  pollDelayMs = 250
 }) {
   await chart.setTimeframe({ timeframe });
 
@@ -683,29 +683,45 @@ export async function executeAutomatedMapping({
 
     // Fetch MTF Bars with condition-based cadence verification
     failureStage = 'bar_capture';
+    const deltaSignals = [];
+    async function tryCollectDelta(tfName) {
+      if (typeof data.getDeltaStudySignals === 'function') {
+        try {
+          const sigs = await data.getDeltaStudySignals();
+          if (Array.isArray(sigs)) {
+            for (const s of sigs) deltaSignals.push({ ...s, timeframe: tfName });
+          }
+        } catch (_) {}
+      }
+    }
+
     console.log('[auto_map_snr] Capturing 1W bars...');
     const { bars: wBars, verification: wVerif } = await fetchTimeframeBarsWithCadence({
       chart, data, timeframe: '1W', count: 100, sleepFn
     });
     console.log('[auto_map_snr] 1W bars verified:', wBars.length, 'cadence:', wVerif.median_cadence_sec);
+    await tryCollectDelta('W');
 
     console.log('[auto_map_snr] Capturing 1D bars...');
     const { bars: dBars, verification: dVerif } = await fetchTimeframeBarsWithCadence({
       chart, data, timeframe: '1D', count: 150, sleepFn
     });
     console.log('[auto_map_snr] 1D bars verified:', dBars.length, 'cadence:', dVerif.median_cadence_sec);
+    await tryCollectDelta('D');
 
     console.log('[auto_map_snr] Capturing 240 bars...');
     const { bars: h4Bars, verification: h4Verif } = await fetchTimeframeBarsWithCadence({
       chart, data, timeframe: '240', count: 150, sleepFn
     });
     console.log('[auto_map_snr] 240 bars verified:', h4Bars.length, 'cadence:', h4Verif.median_cadence_sec);
+    await tryCollectDelta('H4');
 
     console.log('[auto_map_snr] Capturing 60 bars...');
     const { bars: h1Bars, verification: h1Verif } = await fetchTimeframeBarsWithCadence({
       chart, data, timeframe: '60', count: 200, sleepFn
     });
     console.log('[auto_map_snr] 60 bars verified:', h1Bars.length, 'cadence:', h1Verif.median_cadence_sec);
+    await tryCollectDelta('H1');
 
     timeframeVerification = {
       W: wVerif,
@@ -719,10 +735,11 @@ export async function executeAutomatedMapping({
     let deltaLabels = [];
     try {
       deltaLabels = await data.getPineLabels({ study_filter: 'Delta Volume Reversal Finder', verbose: true });
-      console.log('[auto_map_snr] Delta labels fetched:', deltaLabels.length);
+      console.log('[auto_map_snr] Delta labels fetched:', deltaLabels?.studies?.length ?? 0);
     } catch (e) {
       console.warn('[auto_map_snr] Delta indicator labels unavailable:', e.message);
     }
+    console.log('[auto_map_snr] Delta study plot signals captured:', deltaSignals.length);
 
     // 3. Build pure evidence-backed SNR map payload
     console.log('[auto_map_snr] Calling buildSnrMap...');
@@ -730,7 +747,8 @@ export async function executeAutomatedMapping({
       nowSec,
       quote,
       frames: { W: wBars, D: dBars, H4: h4Bars, H1: h1Bars },
-      deltaLabels
+      deltaLabels,
+      deltaSignals
     });
     console.log(`[auto_map_snr] Map generated: ${map.entities.length} entities, manifest hash: ${map.manifest.manifest_hash}`);
 

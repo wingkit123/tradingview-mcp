@@ -449,23 +449,126 @@ function getHorizontalLinePriority(e) {
   else tfScore = 50;
 
   let reasonScore = 0;
-  if (e.reason === 'RBS' || e.reason === 'SBR') reasonScore = 50;
+  if (e.reason === 'RBS' || e.reason === 'SBR') reasonScore = 80;
+  else if (e.reason === 'EB' || e.reason === 'ES') reasonScore = 60;
   else if (e.reason?.includes('Swing')) reasonScore = 40;
-  else if (e.reason === 'EB' || e.reason === 'ES') reasonScore = 30;
-  else if (e.reason === 'DELTA_REV') reasonScore = 25;
+  else if (e.reason === 'DELTA_REV') reasonScore = 30;
   else if (e.reason === 'RANGE_EQ') reasonScore = 20;
 
+  const deltaBonus = (e.tags?.includes('DELTA_CONFIRMED') || e.hasDeltaRev) ? 150 : 0;
+  const weeklyZoneBonus = (e.tags?.includes('WEEKLY_ZONE') || e.inWeeklyZone) ? 50 : 0;
+
   const timeScore = (e.point?.time && Number.isFinite(e.point.time)) ? e.point.time / 1e12 : 0;
-  return tfScore + reasonScore + timeScore;
+  return tfScore + reasonScore + deltaBonus + weeklyZoneBonus + timeScore;
+}
+
+/**
+ * Determine the dominant timeframe and styling for a cluster.
+ * Weekly (Black) dominates Daily, which dominates H4, which dominates H1.
+ */
+export function determineDominantStyle(cluster) {
+  if (cluster.some(m => m.timeframe === 'W' || m.tags?.includes('W'))) {
+    return { timeframe: 'W', ...STYLES.W };
+  }
+  if (cluster.some(m => m.timeframe === 'D' || m.tags?.includes('D'))) {
+    return { timeframe: 'D', ...STYLES.D };
+  }
+  if (cluster.some(m => m.timeframe === 'H4' || m.tags?.includes('H4'))) {
+    return { timeframe: 'H4', ...STYLES.H4 };
+  }
+  return { timeframe: 'H1', ...STYLES.H1 };
+}
+
+/**
+ * Synthesize multi-timeframe confluence label:
+ * e.g. "[W RBS + D EB + H4 RBS @ 4283.72] (AI)"
+ * or "[W RBS + H4 SBR (Double, ★Δ-Buy) @ 4317.02] (AI)"
+ */
+export function synthesizeConfluenceLabel(cluster, targetPrice) {
+  const TF_ORDER = { W: 1, D: 2, H4: 3, H1: 4 };
+
+  const seenTokens = new Set();
+  const tokens = [];
+  let hasDelta = false;
+  let deltaType = null;
+  let hasV = false;
+  let has2B = false;
+
+  for (const m of cluster) {
+    if (m.tags?.includes('DELTA_CONFIRMED') || m.hasDeltaRev || m.reason === 'DELTA_REV' || m.tags?.includes('DELTA_REV') || m.label?.includes('★Δ')) {
+      hasDelta = true;
+      if (m.deltaType) deltaType = m.deltaType;
+      else if (m.tags?.includes('BULL') || m.label?.includes('BuyRev') || m.label?.includes('Buy')) deltaType = 'Buy';
+      else if (m.tags?.includes('BEAR') || m.label?.includes('SellRev') || m.label?.includes('Sell')) deltaType = 'Sell';
+    }
+    if (m.tags?.includes('V角') || m.label?.includes('V角')) hasV = true;
+    if (m.tags?.includes('2B') || m.label?.includes('Double')) has2B = true;
+
+    const tf = m.timeframe || (m.tags?.includes('W') ? 'W' : m.tags?.includes('D') ? 'D' : m.tags?.includes('H4') ? 'H4' : m.tags?.includes('H1') ? 'H1' : null);
+    const reason = m.reason || (m.tags?.includes('RBS') ? 'RBS' : m.tags?.includes('SBR') ? 'SBR' : m.tags?.includes('EB') ? 'EB' : m.tags?.includes('ES') ? 'ES' : null);
+
+    if (tf && reason && reason !== 'DELTA_REV' && reason !== 'RANGE_EQ') {
+      const cleanReason = reason.replace(/\s*\(V角\)/, '');
+      const token = `${tf} ${cleanReason}`;
+      if (!seenTokens.has(token)) {
+        seenTokens.add(token);
+        tokens.push({ tf, reason: cleanReason, token, order: TF_ORDER[tf] || 5 });
+      }
+    }
+  }
+
+  tokens.sort((a, b) => a.order - b.order);
+
+  const extras = [];
+  if (hasV) extras.push('V角');
+  if (has2B) extras.push('Double');
+  if (hasDelta) {
+    if (deltaType === 'Buy' || deltaType === 'BULL') extras.push('★Δ-Buy');
+    else if (deltaType === 'Sell' || deltaType === 'BEAR') extras.push('★Δ-Sell');
+    else extras.push('★Δ-Rev');
+  }
+
+  const extrasStr = extras.length > 0 ? ` (${extras.join(', ')})` : '';
+
+  if (tokens.length === 0) {
+    return cluster[0]?.label || `[Level @ ${targetPrice.toFixed(2)}] (AI)`;
+  }
+
+  if (tokens.length === 1 && extras.length === 0) {
+    return `[${tokens[0].token} @ ${targetPrice.toFixed(2)}] (AI)`;
+  }
+
+  const mainPart = tokens.map(t => t.token).join(' + ');
+  return `[${mainPart}${extrasStr} @ ${targetPrice.toFixed(2)}] (AI)`;
 }
 
 /**
  * Deterministic global horizontal-line canonical dedup/clustering pass with a 4.0 price-point threshold.
- * Keeps one representative and merges confluence metadata deterministically.
+ * Keeps one representative, merges confluence metadata deterministically, and applies dominant timeframe styling.
  */
 export function clusterHorizontalLines(lines = [], threshold = 4.0) {
   if (!Array.isArray(lines) || lines.length === 0) return [];
-  if (lines.length === 1) return [...lines];
+  if (lines.length === 1) {
+    const item = lines[0];
+    const hasDelta = item.tags?.includes('DELTA_CONFIRMED') || item.hasDeltaRev || item.tags?.includes('DELTA_REV') || item.label?.includes('★Δ');
+    if (hasDelta && !item.label?.includes('★Δ')) {
+      const targetPrice = item.price ?? item.point?.price ?? 0;
+      const synthLabel = synthesizeConfluenceLabel([item], targetPrice);
+      const domStyle = determineDominantStyle([item]);
+      return [{
+        ...item,
+        label: synthLabel,
+        overrides: {
+          ...(item.overrides || {}),
+          linecolor: domStyle.color,
+          linewidth: Math.max(item.overrides?.linewidth || domStyle.width, 3),
+          textcolor: domStyle.color,
+          text: synthLabel
+        }
+      }];
+    }
+    return [...lines];
+  }
 
   // Sort deterministically by price ascending, then tiebreak by priority descending, then label
   const sorted = [...lines].sort((a, b) => {
@@ -499,7 +602,26 @@ export function clusterHorizontalLines(lines = [], threshold = 4.0) {
   const result = [];
   for (const cluster of clusters) {
     if (cluster.length === 1) {
-      result.push(cluster[0]);
+      const item = cluster[0];
+      const hasDelta = item.tags?.includes('DELTA_CONFIRMED') || item.hasDeltaRev || item.tags?.includes('DELTA_REV') || item.label?.includes('★Δ');
+      if (hasDelta && !item.label?.includes('★Δ')) {
+        const targetPrice = item.price ?? item.point?.price ?? 0;
+        const synthLabel = synthesizeConfluenceLabel(cluster, targetPrice);
+        const domStyle = determineDominantStyle(cluster);
+        result.push({
+          ...item,
+          label: synthLabel,
+          overrides: {
+            ...(item.overrides || {}),
+            linecolor: domStyle.color,
+            linewidth: Math.max(item.overrides?.linewidth || domStyle.width, 3),
+            textcolor: domStyle.color,
+            text: synthLabel
+          }
+        });
+      } else {
+        result.push(item);
+      }
       continue;
     }
 
@@ -530,12 +652,31 @@ export function clusterHorizontalLines(lines = [], threshold = 4.0) {
     const mergedConfluenceTfs = Array.from(confluenceTfs).sort();
     const mergedConfluenceReasons = Array.from(confluenceReasons).sort();
 
+    // Dominant style: Weekly (Black, width 3) dominates Daily, H4, H1
+    const domStyle = determineDominantStyle(cluster);
+    const targetPrice = representative.price ?? representative.point?.price ?? 0;
+    const synthLabel = synthesizeConfluenceLabel(cluster, targetPrice);
+    const hasDelta = cluster.some(m => m.tags?.includes('DELTA_CONFIRMED') || m.hasDeltaRev || m.tags?.includes('DELTA_REV') || m.label?.includes('★Δ'));
+
+    const updatedOverrides = {
+      ...(representative.overrides || {}),
+      linecolor: domStyle.color,
+      linewidth: hasDelta ? Math.max(domStyle.width, 3) : domStyle.width,
+      textcolor: domStyle.color,
+      text: synthLabel,
+      showPrice: true,
+      showLabel: true
+    };
+
     result.push({
       ...representative,
+      timeframe: domStyle.timeframe,
+      label: synthLabel,
       tags: mergedTags,
       confluence_count: cluster.length,
       confluence_timeframes: mergedConfluenceTfs,
-      confluence_reasons: mergedConfluenceReasons
+      confluence_reasons: mergedConfluenceReasons,
+      overrides: updatedOverrides
     });
   }
 
@@ -565,7 +706,8 @@ export function buildSnrMap({
   nowSec = Math.floor(Date.now() / 1000),
   quote,
   frames = {},
-  deltaLabels = []
+  deltaLabels = [],
+  deltaSignals = []
 } = {}) {
   const quotePrice = typeof quote === 'number'
     ? quote
@@ -589,11 +731,86 @@ export function buildSnrMap({
   const closedH4Bars = getClosedBars(h4Bars);
   const closedH1Bars = getClosedBars(h1Bars);
 
+  // Compile unified Delta signals (plotshape arrows + indicator labels)
+  const allDeltaPoints = [];
+  const parsedLabels = parseDeltaLabels(deltaLabels);
+  for (const d of parsedLabels) {
+    if (d.price != null && Number.isFinite(d.price) && d.time != null && Number.isFinite(d.time)) {
+      allDeltaPoints.push({
+        time: d.time,
+        price: d.price,
+        type: d.tags?.includes('BULL') ? 'Buy' : 'Sell',
+        isBull: d.tags?.includes('BULL'),
+        isBear: d.tags?.includes('BEAR'),
+        source: 'label'
+      });
+    }
+  }
+  if (Array.isArray(deltaSignals)) {
+    for (const s of deltaSignals) {
+      if (s.price != null && Number.isFinite(s.price) && s.time != null && Number.isFinite(s.time)) {
+        const isBull = !!(s.isBull || s.type === 'BULL' || s.type === 'Buy');
+        allDeltaPoints.push({
+          time: s.time,
+          price: s.price,
+          type: isBull ? 'Buy' : 'Sell',
+          isBull,
+          isBear: !isBull,
+          timeframe: s.timeframe,
+          source: 'plot'
+        });
+      }
+    }
+  }
+
+  function matchDeltaConfirmation(targetPrice, targetTime, tolerance = 3.5) {
+    if (targetPrice == null || !Number.isFinite(targetPrice)) return { matched: false, delta: null };
+    for (const dp of allDeltaPoints) {
+      const priceDiff = Math.abs(dp.price - targetPrice);
+      const timeDiff = (targetTime != null && Number.isFinite(targetTime) && Number.isFinite(dp.time))
+        ? Math.abs(dp.time - targetTime)
+        : Infinity;
+      if (priceDiff <= tolerance || timeDiff <= 300) {
+        return { matched: true, delta: dp };
+      }
+    }
+    return { matched: false, delta: null };
+  }
+
+  // Compute Weekly Zone Boundaries (Macro corridor from recent closed weekly bars)
+  let weeklyZoneMin = scan50Min;
+  let weeklyZoneMax = scan50Max;
+  if (closedWBars.length > 0) {
+    const recentWBars = closedWBars.slice(-12);
+    const wLows = recentWBars.map(b => b.low).filter(p => p != null && Number.isFinite(p) && p >= scan50Min - 15 && p <= scan50Max + 15);
+    const wHighs = recentWBars.map(b => b.high).filter(p => p != null && Number.isFinite(p) && p >= scan50Min - 15 && p <= scan50Max + 15);
+    if (wLows.length > 0 && wHighs.length > 0) {
+      weeklyZoneMin = Math.min(...wLows);
+      weeklyZoneMax = Math.max(...wHighs);
+    }
+  }
+
   // 1. Weekly Pivots (Strict +/- 50 window, closed bars only)
   const wPivots = detectPivots(wBars, 2, 2, scan50Min, scan50Max);
+  if (wPivots.length > 0) {
+    const pPrices = wPivots.map(p => p.price);
+    weeklyZoneMin = Math.min(weeklyZoneMin, ...pPrices);
+    weeklyZoneMax = Math.max(weeklyZoneMax, ...pPrices);
+  }
+  weeklyZoneMin = Math.max(scan50Min - 10, weeklyZoneMin);
+  weeklyZoneMax = Math.min(scan50Max + 10, weeklyZoneMax);
+
+  function isInsideWeeklyZone(price) {
+    return price >= (weeklyZoneMin - 2.0) && price <= (weeklyZoneMax + 2.0);
+  }
+
   for (const wp of wPivots) {
     if (wp.time == null || !Number.isFinite(wp.time)) continue;
     const sbrRbs = detectSbrRbs(wp, closedWBars);
+    const deltaMatch = matchDeltaConfirmation(wp.price, wp.time);
+    const tags = ['W', sbrRbs.action, 'WEEKLY_ZONE'];
+    if (deltaMatch.matched) tags.push('DELTA_CONFIRMED');
+
     const label = `[W - ${sbrRbs.action} @ ${wp.price.toFixed(2)}] (AI)`;
     rawEntities.push({
       kind: 'horizontal_line',
@@ -601,12 +818,15 @@ export function buildSnrMap({
       price: wp.price,
       timeframe: 'W',
       reason: sbrRbs.action,
-      tags: ['W', sbrRbs.action],
+      tags,
+      hasDeltaRev: deltaMatch.matched,
+      deltaType: deltaMatch.matched ? deltaMatch.delta.type : null,
+      inWeeklyZone: true,
       point: { time: wp.time, price: wp.price },
       label,
       overrides: {
         linecolor: STYLES.W.color,
-        linewidth: STYLES.W.width,
+        linewidth: deltaMatch.matched ? 3 : STYLES.W.width,
         linestyle: 0,
         showPrice: true,
         showLabel: true,
@@ -621,6 +841,14 @@ export function buildSnrMap({
     if (dp.time == null || !Number.isFinite(dp.time)) continue;
     if (rawEntities.some(e => e.kind === 'horizontal_line' && Math.abs(e.price - dp.price) <= 2.0)) continue;
     const sbrRbs = detectSbrRbs(dp, closedDBars);
+    const deltaMatch = matchDeltaConfirmation(dp.price, dp.time);
+    const inWeekly = isInsideWeeklyZone(dp.price);
+    const tags = ['D', sbrRbs.action];
+    if (inWeekly) tags.push('WEEKLY_ZONE');
+    if (deltaMatch.matched) tags.push('DELTA_CONFIRMED');
+    if (dp.isSharp) tags.push('V角');
+    if (dp.is2B) tags.push('2B');
+
     const vTag = dp.isSharp ? ' (V角)' : '';
     const label = `[D - ${sbrRbs.action}${vTag} @ ${dp.price.toFixed(2)}] (AI)`;
     rawEntities.push({
@@ -629,12 +857,15 @@ export function buildSnrMap({
       price: dp.price,
       timeframe: 'D',
       reason: sbrRbs.action,
-      tags: ['D', sbrRbs.action],
+      tags,
+      hasDeltaRev: deltaMatch.matched,
+      deltaType: deltaMatch.matched ? deltaMatch.delta.type : null,
+      inWeeklyZone: inWeekly,
       point: { time: dp.time, price: dp.price },
       label,
       overrides: {
         linecolor: STYLES.D.color,
-        linewidth: STYLES.D.width,
+        linewidth: deltaMatch.matched ? 3 : STYLES.D.width,
         linestyle: 0,
         showPrice: true,
         showLabel: true,
@@ -643,15 +874,48 @@ export function buildSnrMap({
     });
   }
 
-  // 3. H4 Pivots & Structural Elements (Last 7 days)
-  const sevenDaysAgo = nowSec - 7 * 86400;
-  const h4Pivots = detectPivots(h4Bars, 3, 3, scan50Min - 30, scan50Max + 30)
-    .filter(p => p.time != null && Number.isFinite(p.time) && p.time >= sevenDaysAgo);
+  // 3. H4 Pivots & Structural Elements (Lookback up to 21 days; prioritize SBR/RBS inside Weekly Zone & Delta confirmations)
+  const h4LookbackSec = nowSec - 21 * 86400;
+  const rawH4Pivots = detectPivots(h4Bars, 3, 3, scan50Min - 20, scan50Max + 20)
+    .filter(p => p.time != null && Number.isFinite(p.time) && p.time >= h4LookbackSec);
 
-  for (const h4p of h4Pivots) {
-    if (h4p.time == null || !Number.isFinite(h4p.time)) continue;
-    if (rawEntities.some(e => e.kind === 'horizontal_line' && Math.abs(e.price - h4p.price) <= 2.0)) continue;
-    const sbrRbs = detectSbrRbs(h4p, closedH4Bars);
+  const scoredH4 = rawH4Pivots.map(p => {
+    const sbrRbs = detectSbrRbs(p, closedH4Bars);
+    const inWeekly = isInsideWeeklyZone(p.price);
+    const deltaMatch = matchDeltaConfirmation(p.price, p.time);
+    const isSbrRbs = sbrRbs.action === 'RBS' || sbrRbs.action === 'SBR';
+
+    let score = 0;
+    if (isSbrRbs) score += 100;
+    if (inWeekly && isSbrRbs) score += 80;
+    else if (inWeekly) score += 30;
+    if (deltaMatch.matched) score += 150;
+    if (p.isSharp) score += 20;
+    if (p.is2B) score += 20;
+    score += (p.time - h4LookbackSec) / (21 * 86400) * 10;
+
+    return { pivot: p, sbrRbs, inWeekly, deltaMatch, score };
+  });
+
+  scoredH4.sort((a, b) => b.score - a.score);
+
+  const selectedH4 = [];
+  for (const cand of scoredH4) {
+    const p = cand.pivot;
+    if (rawEntities.some(e => e.kind === 'horizontal_line' && Math.abs(e.price - p.price) <= 2.0)) continue;
+    if (selectedH4.some(s => Math.abs(s.pivot.price - p.price) <= 2.0)) continue;
+    selectedH4.push(cand);
+    if (selectedH4.length >= 6) break;
+  }
+
+  for (const item of selectedH4) {
+    const { pivot: h4p, sbrRbs, inWeekly, deltaMatch } = item;
+    const tags = ['H4', sbrRbs.action];
+    if (inWeekly) tags.push('WEEKLY_ZONE');
+    if (deltaMatch.matched) tags.push('DELTA_CONFIRMED');
+    if (h4p.isSharp) tags.push('V角');
+    if (h4p.is2B) tags.push('2B');
+
     const label = `[H4 - ${sbrRbs.action} @ ${h4p.price.toFixed(2)}] (AI)`;
     rawEntities.push({
       kind: 'horizontal_line',
@@ -659,29 +923,66 @@ export function buildSnrMap({
       price: h4p.price,
       timeframe: 'H4',
       reason: sbrRbs.action,
-      tags: ['H4', sbrRbs.action],
+      tags,
+      hasDeltaRev: deltaMatch.matched,
+      deltaType: deltaMatch.matched ? deltaMatch.delta.type : null,
+      inWeeklyZone: inWeekly,
       point: { time: h4p.time, price: h4p.price },
       label,
       overrides: {
         linecolor: STYLES.H4.color,
-        linewidth: STYLES.H4.width,
+        linewidth: deltaMatch.matched ? 3 : STYLES.H4.width,
         linestyle: 0,
         showPrice: true,
         showLabel: true,
         textcolor: STYLES.H4.color
       }
     });
-    if (rawEntities.filter(e => e.timeframe === 'H4').length >= 4) break;
+  }
+  const h4Pivots = rawH4Pivots;
+
+  // 4. H1 Pivots (Lookback up to 14 days; prioritize SBR/RBS inside Weekly Zone & Delta confirmations)
+  const h1LookbackSec = nowSec - 14 * 86400;
+  const rawH1Pivots = detectPivots(h1Bars, 3, 3, scan50Min - 15, scan50Max + 15)
+    .filter(p => p.time != null && Number.isFinite(p.time) && p.time >= h1LookbackSec);
+
+  const scoredH1 = rawH1Pivots.map(p => {
+    const sbrRbs = detectSbrRbs(p, closedH1Bars);
+    const inWeekly = isInsideWeeklyZone(p.price);
+    const deltaMatch = matchDeltaConfirmation(p.price, p.time);
+    const isSbrRbs = sbrRbs.action === 'RBS' || sbrRbs.action === 'SBR';
+
+    let score = 0;
+    if (isSbrRbs) score += 100;
+    if (inWeekly && isSbrRbs) score += 80;
+    else if (inWeekly) score += 30;
+    if (deltaMatch.matched) score += 150;
+    if (p.isSharp) score += 20;
+    if (p.is2B) score += 20;
+    score += (p.time - h1LookbackSec) / (14 * 86400) * 10;
+
+    return { pivot: p, sbrRbs, inWeekly, deltaMatch, score };
+  });
+
+  scoredH1.sort((a, b) => b.score - a.score);
+
+  const selectedH1 = [];
+  for (const cand of scoredH1) {
+    const p = cand.pivot;
+    if (rawEntities.some(e => e.kind === 'horizontal_line' && Math.abs(e.price - p.price) <= 2.0)) continue;
+    if (selectedH1.some(s => Math.abs(s.pivot.price - p.price) <= 2.0)) continue;
+    selectedH1.push(cand);
+    if (selectedH1.length >= 6) break;
   }
 
-  // 4. H1 Pivots
-  const h1Pivots = detectPivots(h1Bars, 3, 3, scan50Min - 20, scan50Max + 20)
-    .filter(p => p.time != null && Number.isFinite(p.time) && p.time >= sevenDaysAgo);
+  for (const item of selectedH1) {
+    const { pivot: h1p, sbrRbs, inWeekly, deltaMatch } = item;
+    const tags = ['H1', sbrRbs.action];
+    if (inWeekly) tags.push('WEEKLY_ZONE');
+    if (deltaMatch.matched) tags.push('DELTA_CONFIRMED');
+    if (h1p.isSharp) tags.push('V角');
+    if (h1p.is2B) tags.push('2B');
 
-  for (const h1p of h1Pivots) {
-    if (h1p.time == null || !Number.isFinite(h1p.time)) continue;
-    if (rawEntities.some(e => e.kind === 'horizontal_line' && Math.abs(e.price - h1p.price) <= 2.0)) continue;
-    const sbrRbs = detectSbrRbs(h1p, closedH1Bars);
     const label = `[H1 - ${sbrRbs.action} @ ${h1p.price.toFixed(2)}] (AI)`;
     rawEntities.push({
       kind: 'horizontal_line',
@@ -689,20 +990,23 @@ export function buildSnrMap({
       price: h1p.price,
       timeframe: 'H1',
       reason: sbrRbs.action,
-      tags: ['H1', sbrRbs.action],
+      tags,
+      hasDeltaRev: deltaMatch.matched,
+      deltaType: deltaMatch.matched ? deltaMatch.delta.type : null,
+      inWeeklyZone: inWeekly,
       point: { time: h1p.time, price: h1p.price },
       label,
       overrides: {
         linecolor: STYLES.H1.color,
-        linewidth: STYLES.H1.width,
+        linewidth: deltaMatch.matched ? 3 : STYLES.H1.width,
         linestyle: 0,
         showPrice: true,
         showLabel: true,
         textcolor: STYLES.H1.color
       }
     });
-    if (rawEntities.filter(e => e.timeframe === 'H1').length >= 4) break;
   }
+  const h1Pivots = rawH1Pivots;
 
   // 5. Engulfing checks across closed bars (EB / ES) - Drawing coordinates use ONLY closed bar close
   for (const { tf, bars } of [
@@ -718,6 +1022,12 @@ export function buildSnrMap({
       if (type) {
         const price = Number(currBar.close.toFixed(2));
         const extremePrice = Number((type === 'EB' ? (currBar.low ?? currBar.close) : (currBar.high ?? currBar.close)).toFixed(2));
+        const deltaMatch = matchDeltaConfirmation(price, currBar.time);
+        const inWeekly = isInsideWeeklyZone(price);
+        const tags = [tf, type, 'ENGULFING'];
+        if (inWeekly) tags.push('WEEKLY_ZONE');
+        if (deltaMatch.matched) tags.push('DELTA_CONFIRMED');
+
         const label = `[${tf} - ${type} @ ${price.toFixed(2)}] (AI)`;
         rawEntities.push({
           kind: 'horizontal_line',
@@ -725,13 +1035,16 @@ export function buildSnrMap({
           price,
           timeframe: tf,
           reason: type,
-          tags: [tf, type, 'ENGULFING'],
+          tags,
+          hasDeltaRev: deltaMatch.matched,
+          deltaType: deltaMatch.matched ? deltaMatch.delta.type : null,
+          inWeeklyZone: inWeekly,
           point: { time: currBar.time, price },
           extremePrice,
           label,
           overrides: {
             linecolor: STYLES[tf]?.color || STYLES.H1.color,
-            linewidth: STYLES[tf]?.width || STYLES.H1.width,
+            linewidth: deltaMatch.matched ? 3 : (STYLES[tf]?.width || STYLES.H1.width),
             linestyle: 0,
             showPrice: true,
             showLabel: true,
@@ -793,13 +1106,45 @@ export function buildSnrMap({
     }
   }
 
-  // 8. Real Delta Volume Reversal Finder labels
+  // 8. Real Delta Volume Reversal Finder labels & plot signals
   const deltaEntities = parseDeltaLabels(deltaLabels);
   for (const d of deltaEntities) {
-    rawEntities.push({
-      ...d,
-      point: { time: d.time, price: d.price }
-    });
+    if (d.price >= scan50Min && d.price <= scan50Max) {
+      rawEntities.push({
+        ...d,
+        point: { time: d.time, price: d.price }
+      });
+    }
+  }
+  if (Array.isArray(deltaSignals)) {
+    for (const ds of deltaSignals) {
+      if (ds.price != null && Number.isFinite(ds.price) && ds.time != null && Number.isFinite(ds.time)) {
+        if (ds.price < scan50Min || ds.price > scan50Max) continue;
+        const isBull = !!(ds.isBull || ds.type === 'BULL' || ds.type === 'Buy');
+        const labelType = isBull ? 'Delta BuyRev' : 'Delta SellRev';
+        const price = Number(ds.price.toFixed(2));
+        if (!rawEntities.some(e => Math.abs(e.price - price) <= 1.5 && (e.reason === 'DELTA_REV' || e.tags?.includes('DELTA_REV')))) {
+          rawEntities.push({
+            kind: 'horizontal_line',
+            shape: 'horizontal_line',
+            price,
+            time: ds.time,
+            reason: 'DELTA_REV',
+            tags: ['DELTA_REV', isBull ? 'BULL' : 'BEAR'],
+            label: `[★${labelType} @ ${price.toFixed(2)}] (AI)`,
+            overrides: {
+              linecolor: STYLES.DELTA.color,
+              linewidth: STYLES.DELTA.width,
+              linestyle: 2,
+              showPrice: true,
+              showLabel: true,
+              textcolor: STYLES.DELTA.color
+            },
+            point: { time: ds.time, price }
+          });
+        }
+      }
+    }
   }
 
   // 9. Final deterministic global horizontal-line canonical dedup/clustering pass with a 4.0 price-point threshold
@@ -840,9 +1185,22 @@ export function buildSnrMap({
       if (h1Eb) {
         h1Direction = `H1: ${h1Eb.reason === 'EB' ? 'Bullish Engulfing Hold' : 'Bearish Engulfing Reject'}`;
       } else if (h1Pivots.length > 0) {
-
         const lastH1 = h1Pivots[h1Pivots.length - 1];
         h1Direction = `H1: ${lastH1.type === 'R' ? 'Supply Reject' : 'Demand Hold'} @ ${lastH1.price.toFixed(2)}`;
+      }
+
+      // Check for high-confluence or delta-confirmed levels to highlight in the brief
+      const deltaConfirmed = entities.filter(e => e.tags?.includes('DELTA_CONFIRMED') || e.hasDeltaRev);
+      if (deltaConfirmed.length > 0) {
+        const topDelta = deltaConfirmed[0];
+        const tf = topDelta.timeframe || 'MTF';
+        const act = topDelta.reason || 'SBR/RBS';
+        const dType = topDelta.deltaType ? `★Δ-${topDelta.deltaType}` : '★Δ-Rev';
+        if (tf === 'H4') {
+          h4Structure += ` [${act} ${dType}]`;
+        } else {
+          h1Direction += ` [${act} ${dType}]`;
+        }
       }
 
       const keyLevels = entities

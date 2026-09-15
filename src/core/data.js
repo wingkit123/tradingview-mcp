@@ -630,3 +630,46 @@ export async function getPineBoxes({ study_filter, verbose } = {}) {
   });
   return { success: true, study_count: studies.length, studies };
 }
+
+/**
+ * Extract Delta Volume Reversal Finder plotshape signals (plot_0 Up Arrow, plot_1 Down Arrow).
+ */
+export async function getDeltaStudySignals() {
+  const result = await evaluate(`
+    (function() {
+      var chart = window.TradingViewApi._activeChartWidgetWV.value()._chartWidget;
+      var sources = chart.model().model().dataSources();
+      var s = sources.find(function(x) { return x.metaInfo && (x.metaInfo().description || "").includes("Delta Volume Reversal"); });
+      if (!s) return [];
+      var d = s.data();
+      if (!d || typeof d.lastIndex !== 'function') return [];
+      var lastIndex = d.lastIndex();
+      var firstIndex = d.firstIndex();
+      var ms = chart.model().model().mainSeries();
+      var msBars = ms.bars ? ms.bars() : null;
+      if (!msBars) return [];
+
+      var signals = [];
+      var start = Math.max(firstIndex, lastIndex - 200);
+      for (var i = start; i <= lastIndex; i++) {
+        var val = d.valueAt(i);
+        if (val && (val[1] !== 0 || val[2] !== 0)) {
+          var bar = msBars.valueAt(i);
+          var isBull = val[1] !== 0;
+          var isBear = val[2] !== 0;
+          var time = val[0];
+          var price = isBull ? (bar ? bar[3] : null) : (bar ? bar[2] : null);
+          signals.push({
+            time: time,
+            price: price != null ? Math.round(price * 100) / 100 : null,
+            isBull: isBull,
+            isBear: isBear,
+            type: isBull ? 'BULL' : 'BEAR'
+          });
+        }
+      }
+      return signals;
+    })()
+  `);
+  return Array.isArray(result) ? result : [];
+}

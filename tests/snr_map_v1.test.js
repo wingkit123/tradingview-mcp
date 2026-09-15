@@ -12,7 +12,10 @@ import {
   detectRanges,
   parseDeltaLabels,
   buildSnrMap,
-  formatBriefTimestamp
+  formatBriefTimestamp,
+  clusterHorizontalLines,
+  determineDominantStyle,
+  synthesizeConfluenceLabel
 } from '../scripts/lib/snr_map_v1.js';
 
 describe('SNR Map Builder v1 — Pure Evidence & Closed Bar Module', () => {
@@ -610,6 +613,161 @@ describe('SNR Map Builder v1 — Pure Evidence & Closed Bar Module', () => {
       // 2026-09-15 16:00:00 UTC -> 12:00 AM UTC+8 (next day 16/9)
       const t4 = Math.floor(Date.UTC(2026, 8, 15, 16, 0, 0) / 1000);
       assert.equal(formatBriefTimestamp(t4), '16/9, 12.00am');
+    });
+  });
+
+  describe('Multi-Timeframe Confluence Formatting & Weekly Dominance', () => {
+    it('governs dominant style with Weekly (Black #000000, width 3) over Daily, H4, and H1', () => {
+      const cluster = [
+        { timeframe: 'H4', price: 3000, overrides: { linecolor: '#D32F2F', linewidth: 2 } },
+        { timeframe: 'W', price: 3001, overrides: { linecolor: '#000000', linewidth: 3 } },
+        { timeframe: 'D', price: 3000.5, overrides: { linecolor: '#7E57C2', linewidth: 2 } }
+      ];
+      const dom = determineDominantStyle(cluster);
+      assert.equal(dom.timeframe, 'W');
+      assert.equal(dom.color, '#000000');
+      assert.equal(dom.width, 3);
+    });
+
+    it('governs dominant style with Daily over H4 and H1 when Weekly is absent', () => {
+      const cluster = [
+        { timeframe: 'H1', price: 3000 },
+        { timeframe: 'D', price: 3001 }
+      ];
+      const dom = determineDominantStyle(cluster);
+      assert.equal(dom.timeframe, 'D');
+      assert.equal(dom.color, '#7E57C2');
+    });
+
+    it('synthesizes multi-timeframe confluence label: W RBS + D EB + H4 RBS @ price (AI)', () => {
+      const cluster = [
+        { timeframe: 'H4', reason: 'RBS', price: 4283.72 },
+        { timeframe: 'W', reason: 'RBS', price: 4283.72 },
+        { timeframe: 'D', reason: 'EB', price: 4283.72 }
+      ];
+      const label = synthesizeConfluenceLabel(cluster, 4283.72);
+      assert.equal(label, '[W RBS + D EB + H4 RBS @ 4283.72] (AI)');
+    });
+
+    it('synthesizes confluence label with patterns and Delta confirmation: (Double, ★Δ-Buy)', () => {
+      const cluster = [
+        { timeframe: 'W', reason: 'RBS', price: 4283.72 },
+        { timeframe: 'D', reason: 'EB', price: 4283.72, tags: ['2B'] },
+        { timeframe: 'H4', reason: 'RBS', price: 4283.72, tags: ['DELTA_CONFIRMED'], deltaType: 'Buy' }
+      ];
+      const label = synthesizeConfluenceLabel(cluster, 4283.72);
+      assert.equal(label, '[W RBS + D EB + H4 RBS (Double, ★Δ-Buy) @ 4283.72] (AI)');
+    });
+
+    it('clusters multi-timeframe lines into a single line with black weekly styling and combined label', () => {
+      const lines = [
+        {
+          kind: 'horizontal_line',
+          price: 4283.0,
+          timeframe: 'W',
+          reason: 'RBS',
+          tags: ['W', 'RBS'],
+          point: { time: 1000, price: 4283.0 },
+          label: '[W - RBS @ 4283.00] (AI)',
+          overrides: { linecolor: '#000000', linewidth: 3, text: '[W - RBS @ 4283.00] (AI)' }
+        },
+        {
+          kind: 'horizontal_line',
+          price: 4284.5,
+          timeframe: 'D',
+          reason: 'EB',
+          tags: ['D', 'EB', 'ENGULFING'],
+          point: { time: 2000, price: 4284.5 },
+          label: '[D - EB @ 4284.50] (AI)',
+          overrides: { linecolor: '#7E57C2', linewidth: 2, text: '[D - EB @ 4284.50] (AI)' }
+        },
+        {
+          kind: 'horizontal_line',
+          price: 4283.7,
+          timeframe: 'H4',
+          reason: 'RBS',
+          tags: ['H4', 'RBS', 'DELTA_CONFIRMED'],
+          hasDeltaRev: true,
+          deltaType: 'Buy',
+          point: { time: 3000, price: 4283.7 },
+          label: '[H4 - RBS @ 4283.70] (AI)',
+          overrides: { linecolor: '#D32F2F', linewidth: 3, text: '[H4 - RBS @ 4283.70] (AI)' }
+        }
+      ];
+
+      const clustered = clusterHorizontalLines(lines, 4.0);
+      assert.equal(clustered.length, 1);
+      assert.equal(clustered[0].overrides.linecolor, '#000000', 'Must use Weekly black color');
+      assert.equal(clustered[0].overrides.linewidth, 3, 'Must use linewidth 3');
+      assert.ok(clustered[0].label.includes('W RBS + D EB + H4 RBS'), `Expected W RBS + D EB + H4 RBS, got ${clustered[0].label}`);
+      assert.ok(clustered[0].label.includes('★Δ-Buy'), `Expected ★Δ-Buy in label, got ${clustered[0].label}`);
+    });
+  });
+
+  describe('Delta Volume Reversal Plot Signals & SBR/RBS Confirmation', () => {
+    it('integrates deltaSignals into buildSnrMap and tags matched levels with DELTA_CONFIRMED', () => {
+      const nowSec = 1700050000;
+      const baseTime = nowSec - 20000;
+      // Create H4 bars with a confirmed pivot at 3005 (left=3, right=3 at index 3)
+      const h4Bars = [
+        { time: baseTime + 100, open: 2980, high: 2985, low: 2975, close: 2980 },
+        { time: baseTime + 200, open: 2980, high: 2988, low: 2975, close: 2985 },
+        { time: baseTime + 300, open: 2985, high: 2992, low: 2980, close: 2990 },
+        { time: baseTime + 400, open: 2990, high: 3005, low: 2985, close: 3000 },
+        { time: baseTime + 500, open: 3000, high: 2995, low: 2975, close: 2980 },
+        { time: baseTime + 600, open: 2980, high: 2988, low: 2975, close: 2980 },
+        { time: baseTime + 700, open: 2980, high: 2985, low: 2975, close: 2980 },
+        { time: baseTime + 800, open: 2980, high: 2985, low: 2975, close: 2980 }
+      ];
+      // Supply a Delta signal matching the pivot at 3005
+      const deltaSignals = [
+        { time: baseTime + 400, price: 3005, isBull: false, isBear: true, type: 'BEAR', timeframe: 'H4' }
+      ];
+
+      const map = buildSnrMap({
+        nowSec,
+        quote: 2990,
+        frames: { H4: { bars: h4Bars } },
+        deltaSignals
+      });
+
+      const confirmedEntity = map.entities.find(e => e.tags?.includes('DELTA_CONFIRMED') || e.hasDeltaRev);
+      assert.ok(confirmedEntity, 'Expected entity to be confirmed by delta signal');
+      assert.equal(confirmedEntity.overrides.linewidth, 3, 'Delta confirmed lines must have linewidth 3');
+
+      // AI Brief note must include the Delta confirmation
+      const noteEntity = map.entities.find(e => e.kind === 'text');
+      assert.ok(noteEntity, 'Brief note should exist');
+      assert.ok(noteEntity.label.includes('★Δ'), `Expected ★Δ in AI Brief note: ${noteEntity.label}`);
+    });
+
+    it('filters out standalone delta signals and labels outside quotePrice +/- 50 to avoid off-chart clutter', () => {
+      const nowSec = 1700050000;
+      const quote = 3000;
+      // Supply delta signals: one within range (3020), one way above (3100), one way below (2800)
+      const deltaSignals = [
+        { time: nowSec - 100, price: 3020, isBull: true, type: 'BULL', timeframe: 'H1' },
+        { time: nowSec - 200, price: 3100, isBull: false, type: 'BEAR', timeframe: 'H1' },
+        { time: nowSec - 300, price: 2800, isBull: true, type: 'BULL', timeframe: 'H1' }
+      ];
+      const deltaLabels = [
+        { text: '★Δ-Rev Buy', price: 3010, time: nowSec - 50 },
+        { text: '★Δ-Rev Sell', price: 3200, time: nowSec - 150 }
+      ];
+
+      const map = buildSnrMap({
+        nowSec,
+        quote,
+        frames: {},
+        deltaSignals,
+        deltaLabels
+      });
+
+      const deltaLines = map.entities.filter(e => e.reason === 'DELTA_REV' || e.tags?.includes('DELTA_REV'));
+      // Only 3020 and 3010 should be present
+      assert.equal(deltaLines.length, 2);
+      assert.ok(deltaLines.every(e => e.price >= quote - 50 && e.price <= quote + 50));
+      assert.ok(!deltaLines.some(e => e.price === 3100 || e.price === 2800 || e.price === 3200));
     });
   });
 });
