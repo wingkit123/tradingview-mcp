@@ -53,6 +53,9 @@ param (
     [string]$Time = '08:00',
 
     [Parameter()]
+    [string]$Interval = '4h',
+
+    [Parameter()]
     [DayOfWeek[]]$DaysOfWeek = @(
         [DayOfWeek]::Monday,
         [DayOfWeek]::Tuesday,
@@ -114,7 +117,8 @@ if ($Status) {
     Write-Host "Triggers:"
     foreach ($trigger in $existing.Triggers) {
         $days = if ($trigger.DaysOfWeek) { $trigger.DaysOfWeek -join ', ' } else { 'Daily' }
-        Write-Host "  Start: $($trigger.StartBoundary) | Days: $days | Enabled: $($trigger.Enabled)"
+        $repText = if ($trigger.Repetition -and $trigger.Repetition.Interval) { " | Repeat: every $($trigger.Repetition.Interval) for $($trigger.Repetition.Duration)" } else { "" }
+        Write-Host "  Start: $($trigger.StartBoundary) | Days: $days$repText | Enabled: $($trigger.Enabled)"
     }
     exit 0
 }
@@ -190,6 +194,22 @@ $Trigger = New-ScheduledTaskTrigger `
     -DaysOfWeek $DaysOfWeek `
     -At $dt.ToString("HH:mm")
 
+# Configure repetition if interval specified
+if ($Interval -and $Interval -ne 'none') {
+    $ptInterval = if ($Interval -match '^(\d+)[hH]$') {
+        "PT$($Matches[1])H"
+    } elseif ($Interval -match '^(\d+)[mM]$') {
+        "PT$($Matches[1])M"
+    } else {
+        $Interval
+    }
+    $rep = [Microsoft.Management.Infrastructure.CimInstance]::new((Get-CimClass -ClassName MSFT_TaskRepetitionPattern -Namespace Root/Microsoft/Windows/TaskScheduler))
+    $rep.Interval = $ptInterval
+    $rep.Duration = 'P1D'
+    $rep.StopAtDurationEnd = $false
+    $Trigger.Repetition = $rep
+}
+
 $Principal = New-ScheduledTaskPrincipal `
     -UserId $env:USERNAME `
     -LogonType Interactive `
@@ -203,7 +223,8 @@ $Settings = New-ScheduledTaskSettingsSet `
     -RestartCount 1 `
     -RestartInterval (New-TimeSpan -Minutes 1)
 
-$Description = "Automated daily XAUUSD multi-timeframe SNR analysis and TradingView chart mapper ($Mode mode) at $Time on trading days. Protected by (AI) ownership markers and atomic rollback."
+$repeatDesc = if ($Interval -and $Interval -ne 'none') { " (repeats every $Interval)" } else { "" }
+$Description = "Automated daily XAUUSD multi-timeframe SNR analysis and TradingView chart mapper ($Mode mode) starting at $Time on trading days$repeatDesc. Protected by (AI) ownership markers and atomic rollback."
 
 Register-ScheduledTask `
     -TaskName $TaskName `
@@ -219,7 +240,7 @@ $registered = Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinu
 if ($registered) {
     $info = Get-ScheduledTaskInfo -TaskName $TaskName
     Write-Host "[ScheduleTask] SUCCESS: Task '$TaskName' registered and enabled!" -ForegroundColor Green
-    Write-Host "  Schedule:       Monday - Friday at $Time (Local Time)" -ForegroundColor Green
+    Write-Host "  Schedule:       Monday - Friday at $Time, repeating every $Interval" -ForegroundColor Green
     Write-Host "  Mode:           $Mode (AllowMutation = $AllowMutation)" -ForegroundColor Green
     Write-Host "  Target Chart:   1xfXpF1b (OANDA:XAUUSD)" -ForegroundColor Green
     Write-Host "  Browser Mode:   ChromeTradingProfile on 127.0.0.1:9222" -ForegroundColor Green
