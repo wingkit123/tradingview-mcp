@@ -543,6 +543,21 @@ export function clusterHorizontalLines(lines = [], threshold = 4.0) {
 }
 
 /**
+ * Format brief note timestamp in UTC+8 (e.g. "15/9, 8.00am", "15/9, 12.00pm").
+ */
+export function formatBriefTimestamp(nowSec = Math.floor(Date.now() / 1000)) {
+  const d = new Date(nowSec * 1000);
+  const utc8 = new Date(d.getTime() + 8 * 3600 * 1000);
+  const day = utc8.getUTCDate();
+  const month = utc8.getUTCMonth() + 1;
+  const rawHour = utc8.getUTCHours();
+  const minutes = String(utc8.getUTCMinutes()).padStart(2, '0');
+  const period = rawHour >= 12 ? 'pm' : 'am';
+  const hour12 = rawHour % 12 === 0 ? 12 : rawHour % 12;
+  return `${day}/${month}, ${hour12}.${minutes}${period}`;
+}
+
+/**
  * Pure SNR map builder.
  * Builds immutable snr-map.v1 payload.
  */
@@ -825,6 +840,7 @@ export function buildSnrMap({
       if (h1Eb) {
         h1Direction = `H1: ${h1Eb.reason === 'EB' ? 'Bullish Engulfing Hold' : 'Bearish Engulfing Reject'}`;
       } else if (h1Pivots.length > 0) {
+
         const lastH1 = h1Pivots[h1Pivots.length - 1];
         h1Direction = `H1: ${lastH1.type === 'R' ? 'Supply Reject' : 'Demand Hold'} @ ${lastH1.price.toFixed(2)}`;
       }
@@ -843,7 +859,8 @@ export function buildSnrMap({
         condStatement = `Invalidation: Break below ${supp.toFixed(1)} or above ${res.toFixed(1)} shifts bias`;
       }
 
-      const noteHeader = '[📌 XAUUSD AI Brief] (AI)';
+      const timeStr = formatBriefTimestamp(nowSec);
+      const noteHeader = `[📌 XAUUSD AI Brief (${timeStr})] (AI)`;
       const noteLines = [noteHeader, dailyRegime, h4Structure, h1Direction, condStatement];
       note = noteLines.join('\n');
 

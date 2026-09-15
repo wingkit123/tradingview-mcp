@@ -826,6 +826,42 @@ export async function executeAutomatedMapping({
       }
     }
 
+    // Safety sweep: ensure no unmanaged or duplicate AI Brief notes persist on chart across any session/runner
+    if (typeof draw.listDrawings === 'function') {
+      try {
+        const liveDrawings = await draw.listDrawings();
+        const keptIds = new Set(diff.keep.map(k => k.entity_id));
+        const deleteIds = new Set(diff.delete.map(d => d.entity_id));
+
+        for (const shape of (liveDrawings.shapes || [])) {
+          if (!shape.id || keptIds.has(shape.id) || deleteIds.has(shape.id)) continue;
+          if (shape.name === 'text' || shape.shape === 'text' || !shape.name) {
+            try {
+              const p = await draw.getProperties({ entity_id: shape.id });
+              const txt = readVisibleAiText(p);
+              if (txt.includes('[📌 XAUUSD AI Brief') && /\(AI\)/.test(txt)) {
+                console.log(`[auto_map_snr] Discovered orphan AI Brief on chart (${shape.id}), queueing for retirement.`);
+                diff.delete.push({
+                  entity_id: shape.id,
+                  entity: {
+                    entity_id: shape.id,
+                    kind: 'text',
+                    shape: 'text',
+                    label: txt,
+                    point: p.points?.[0] || { time: nowSec, price: quotePrice }
+                  }
+                });
+                deleteIds.add(shape.id);
+                diff.summary.delete_count++;
+              }
+            } catch (_) {}
+          }
+        }
+      } catch (scanErr) {
+        console.warn('[auto_map_snr] Non-fatal: Orphan brief scan skipped:', scanErr.message);
+      }
+    }
+
     console.log(`[auto_map_snr] Diff plan: Append ${diff.append.length}, Keep ${diff.keep.length}, Delete ${diff.delete.length}`);
 
     if (diff.delete.length > 0 && (

@@ -11,7 +11,8 @@ import {
   detectTrendlines,
   detectRanges,
   parseDeltaLabels,
-  buildSnrMap
+  buildSnrMap,
+  formatBriefTimestamp
 } from '../scripts/lib/snr_map_v1.js';
 
 describe('SNR Map Builder v1 — Pure Evidence & Closed Bar Module', () => {
@@ -466,9 +467,9 @@ describe('SNR Map Builder v1 — Pure Evidence & Closed Bar Module', () => {
       assert.notEqual(noteEntity.overrides?.backgroundColor, 'rgba(255, 255, 255, 0.90)');
       assert.equal(noteEntity.overrides?.fillBackground, false);
 
-      // Note starts with [📌 XAUUSD AI Brief] (AI) followed by evidence-derived lines
+      // Note starts with [📌 XAUUSD AI Brief (timestamp)] (AI) followed by evidence-derived lines
       const lines = noteEntity.label.split('\n');
-      assert.equal(lines[0], '[📌 XAUUSD AI Brief] (AI)', 'Note must start with required AI Brief header');
+      assert.ok(lines[0].startsWith('[📌 XAUUSD AI Brief (') && lines[0].endsWith(')] (AI)'), 'Note must start with required AI Brief header and timestamp');
       assert.ok(lines.length <= 5, `Expected <= 5 lines, got ${lines.length}`);
       assert.ok(lines.some(l => /Daily|D:/i.test(l)), 'Contains Daily regime');
       assert.ok(lines.some(l => /H4/i.test(l)), 'Contains H4 structure');
@@ -496,9 +497,9 @@ describe('SNR Map Builder v1 — Pure Evidence & Closed Bar Module', () => {
       assert.ok(map.entities.length > 0);
       const noteEntity = map.entities.find(e => e.kind === 'text');
       assert.ok(noteEntity, 'Note entity should exist');
-      const lines = noteEntity.label.split('\n');
-      assert.equal(lines[0], '[📌 XAUUSD AI Brief] (AI)');
-      assert.equal(lines[4], 'Invalidation: INSUFFICIENT_EVIDENCE');
+      const lines2 = noteEntity.label.split('\n');
+      assert.ok(lines2[0].startsWith('[📌 XAUUSD AI Brief (') && lines2[0].endsWith(')] (AI)'));
+      assert.equal(lines2[4], 'Invalidation: INSUFFICIENT_EVIDENCE');
       assert.equal(noteEntity.label.includes('3060.0'), false, 'Must not use quotePrice + 10 fallback');
       assert.equal(noteEntity.label.includes('3040.0'), false, 'Must not use quotePrice - 10 fallback');
     });
@@ -521,9 +522,9 @@ describe('SNR Map Builder v1 — Pure Evidence & Closed Bar Module', () => {
 
       const noteEntity = map.entities.find(e => e.kind === 'text');
       assert.ok(noteEntity);
-      const lines = noteEntity.label.split('\n');
-      assert.equal(lines[0], '[📌 XAUUSD AI Brief] (AI)');
-      assert.equal(lines[4], 'Invalidation: INSUFFICIENT_EVIDENCE');
+      const lines3 = noteEntity.label.split('\n');
+      assert.ok(lines3[0].startsWith('[📌 XAUUSD AI Brief (') && lines3[0].endsWith(')] (AI)'));
+      assert.equal(lines3[4], 'Invalidation: INSUFFICIENT_EVIDENCE');
     });
 
     it('uses actual entity timestamps and eliminates Date.now/nowSec fallback on detector output entities', () => {
@@ -591,6 +592,24 @@ describe('SNR Map Builder v1 — Pure Evidence & Closed Bar Module', () => {
       const structuralPrices = map.entities.filter(e => e.kind !== 'text').map(e => e.point?.price);
       assert.equal(note.point.time, nowSec);
       assert.ok(structuralPrices.includes(note.point.price), 'Note price must remain anchored to real structure');
+    });
+
+    it('formats brief timestamp accurately in UTC+8', () => {
+      // 2026-09-15 00:00:00 UTC -> 08:00 AM UTC+8
+      const t1 = Math.floor(Date.UTC(2026, 8, 15, 0, 0, 0) / 1000);
+      assert.equal(formatBriefTimestamp(t1), '15/9, 8.00am');
+
+      // 2026-09-15 04:00:00 UTC -> 12:00 PM UTC+8
+      const t2 = Math.floor(Date.UTC(2026, 8, 15, 4, 0, 0) / 1000);
+      assert.equal(formatBriefTimestamp(t2), '15/9, 12.00pm');
+
+      // 2026-09-15 08:00:00 UTC -> 04:00 PM UTC+8
+      const t3 = Math.floor(Date.UTC(2026, 8, 15, 8, 0, 0) / 1000);
+      assert.equal(formatBriefTimestamp(t3), '15/9, 4.00pm');
+
+      // 2026-09-15 16:00:00 UTC -> 12:00 AM UTC+8 (next day 16/9)
+      const t4 = Math.floor(Date.UTC(2026, 8, 15, 16, 0, 0) / 1000);
+      assert.equal(formatBriefTimestamp(t4), '16/9, 12.00am');
     });
   });
 });
