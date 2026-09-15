@@ -1,76 +1,34 @@
 {
   "schema_version": "snr-map.v1",
-  "manifest_hash": "65c51373708b6d64d16a3c94f17e1ce5e5c0894405c722d58b850249a76c3b1f",
+  "manifest_hash": "54cce7e62276a1654a70cc2e91288b5649196cbb7c81dc4a332e5590728cd268",
   "symbol": "OANDA:XAUUSD",
-  "generated_at_sec": 1789405162,
-  "quote_price": 4315.265,
+  "generated_at_sec": 1789447419,
+  "quote_price": 4305.74,
   "mode": "diff",
-  "mutation_performed": false,
-  "created_entity_ids": [],
-  "retired_entity_ids": [],
-  "kept_entity_ids": [
+  "mutation_performed": true,
+  "created_entity_ids": [
+    "73XVRi",
+    "Etyt69"
+  ],
+  "retired_entity_ids": [
     "KRg0hD",
     "OT9ByO",
+    "tYoD9C"
+  ],
+  "kept_entity_ids": [
     "K4WU1W",
     "XDyzR4",
     "wESkAe",
     "ys5x8Q",
-    "5kBvsd",
-    "tYoD9C"
+    "5kBvsd"
   ],
   "diff_summary": {
-    "keep_count": 8,
-    "append_count": 0,
-    "delete_count": 0
+    "keep_count": 5,
+    "append_count": 2,
+    "delete_count": 3
   },
-  "entity_count": 8,
+  "entity_count": 7,
   "entities": [
-    {
-      "entity_id": "KRg0hD",
-      "kind": "trend_line",
-      "shape": "trend_line",
-      "reason": "TL_SETUP",
-      "point": {
-        "time": 1789347600,
-        "price": 4353.35
-      },
-      "point2": {
-        "time": 1789362000,
-        "price": 4337.4
-      },
-      "tags": [
-        "TREND_LINE",
-        "TL_SETUP",
-        "RESISTANCE_TL"
-      ],
-      "label": "[TL_SETUP Resistance Retest/Reject] (AI)",
-      "overrides": {
-        "linecolor": "#B8860B",
-        "linewidth": 2,
-        "linestyle": 0
-      }
-    },
-    {
-      "entity_id": "OT9ByO",
-      "kind": "text",
-      "shape": "text",
-      "point": {
-        "time": 1789405162,
-        "price": 4353.35
-      },
-      "tags": [
-        "NOTE"
-      ],
-      "label": "[📌 XAUUSD AI Brief] (AI)\nDaily: Support at 4328.40\nH4: Swing Resistance @ 4388.56\nH1: Demand Hold @ 4271.27\nInvalidation: Break below 4304.2 or above 4317.0 shifts bias",
-      "overrides": {
-        "text": "[📌 XAUUSD AI Brief] (AI)\nDaily: Support at 4328.40\nH4: Swing Resistance @ 4388.56\nH1: Demand Hold @ 4271.27\nInvalidation: Break below 4304.2 or above 4317.0 shifts bias",
-        "color": "#1565C0",
-        "fontsize": 10,
-        "bold": true,
-        "fillBackground": false,
-        "showLabel": true
-      }
-    },
     {
       "entity_id": "K4WU1W",
       "kind": "horizontal_line",
@@ -217,28 +175,50 @@
       ]
     },
     {
-      "entity_id": "tYoD9C",
+      "entity_id": "73XVRi",
+      "kind": "text",
+      "shape": "text",
+      "point": {
+        "time": 1789447419,
+        "price": 4271.27
+      },
+      "tags": [
+        "NOTE"
+      ],
+      "label": "[📌 XAUUSD AI Brief] (AI)\nDaily: Support at 4328.40\nH4: Swing Support @ 4271.27\nH1: Demand Hold @ 4283.72\nInvalidation: Break below 4304.2 or above 4317.0 shifts bias",
+      "overrides": {
+        "text": "[📌 XAUUSD AI Brief] (AI)\nDaily: Support at 4328.40\nH4: Swing Support @ 4271.27\nH1: Demand Hold @ 4283.72\nInvalidation: Break below 4304.2 or above 4317.0 shifts bias",
+        "color": "#1565C0",
+        "fontsize": 10,
+        "bold": true,
+        "fillBackground": false,
+        "showLabel": true
+      }
+    },
+    {
+      "entity_id": "Etyt69",
       "kind": "horizontal_line",
       "shape": "horizontal_line",
-      "price": 4388.56,
+      "price": 4271.27,
       "timeframe": "H4",
-      "reason": "Swing Resistance",
+      "reason": "Swing Support",
       "tags": [
         "H4",
-        "Swing Resistance"
+        "Swing Support"
       ],
       "point": {
-        "time": 1789117200,
-        "price": 4388.56
+        "time": 1789376400,
+        "price": 4271.27
       },
-      "label": "[H4 - Swing Resistance @ 4388.56] (AI)",
+      "label": "[H4 - Swing Support @ 4271.27] (AI)",
       "overrides": {
         "linecolor": "#D32F2F",
         "linewidth": 2,
         "linestyle": 0,
         "showPrice": true,
         "showLabel": true,
-        "textcolor": "#D32F2F"
+        "textcolor": "#D32F2F",
+        "text": "[H4 - Swing Support @ 4271.27] (AI)"
       }
     }
   ],

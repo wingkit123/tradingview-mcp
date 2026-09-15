@@ -4,8 +4,8 @@
     "failure_stage":  "complete",
     "error":  null,
     "exit_code":  0,
-    "started_at_utc":  "2026-09-14T16:59:19.4372547Z",
-    "completed_at_utc":  "2026-09-14T16:59:30.7753227Z",
+    "started_at_utc":  "2026-09-15T04:43:38.3207745Z",
+    "completed_at_utc":  "2026-09-15T04:43:50.0190211Z",
     "target_identity":  {
                             "expected_chart_id":  "1xfXpF1b",
                             "expected_symbol":  "OANDA:XAUUSD",
@@ -66,6 +66,6 @@
                                            "evidence":  "ui_saved_acknowledgement"
                                        }
                    },
-    "manifest_hash":  "65c51373708b6d64d16a3c94f17e1ce5e5c0894405c722d58b850249a76c3b1f",
-    "quote_price":  4315.265
+    "manifest_hash":  "54cce7e62276a1654a70cc2e91288b5649196cbb7c81dc4a332e5590728cd268",
+    "quote_price":  4305.74
 }
