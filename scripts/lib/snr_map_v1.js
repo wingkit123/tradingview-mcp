@@ -435,6 +435,81 @@ export function parseDeltaLabels(deltaLabels) {
 }
 
 /**
+ * Detect liquidity sweep (BSL/SSL raid) confirmation for a delta reversal signal.
+ * - SellRev (Bearish): Price swept above a recent swing high and rejected back below it.
+ * - BuyRev (Bullish): Price swept below a recent swing low and rejected back above it.
+ */
+export function detectLiquiditySweep(signal, closedH1Bars = [], closedH4Bars = []) {
+  if (!signal || signal.price == null || !Number.isFinite(signal.price)) {
+    return { isSweep: false, reason: null };
+  }
+
+  const sPrice = signal.price;
+  const sTime = signal.time ?? 0;
+  const isBull = !!(signal.isBull || signal.type === 'BULL' || signal.type === 'Buy');
+
+  const checkBars = (Array.isArray(closedH1Bars) && closedH1Bars.length > 0)
+    ? closedH1Bars
+    : (Array.isArray(closedH4Bars) ? closedH4Bars : []);
+
+  if (checkBars.length < 5) {
+    return { isSweep: false, reason: null };
+  }
+
+  const priorBars = sTime > 0 ? checkBars.filter(b => b.time < sTime) : checkBars.slice(0, -1);
+  const recentPrior = priorBars.slice(-48);
+  if (recentPrior.length < 3) {
+    return { isSweep: false, reason: null };
+  }
+
+  if (!isBull) {
+    let maxHigh = -Infinity;
+    for (const b of recentPrior) {
+      const h = b.high != null ? b.high : b.close;
+      if (h != null && h > maxHigh) maxHigh = h;
+    }
+    if (Number.isFinite(maxHigh) && sPrice >= maxHigh - 2.5 && sPrice <= maxHigh + 5.0) {
+      return { isSweep: true, reason: 'SWEEP_HIGH', sweptPrice: maxHigh };
+    }
+  } else {
+    let minLow = Infinity;
+    for (const b of recentPrior) {
+      const l = b.low != null ? b.low : b.close;
+      if (l != null && l < minLow) minLow = l;
+    }
+    if (Number.isFinite(minLow) && sPrice <= minLow + 2.5 && sPrice >= minLow - 5.0) {
+      return { isSweep: true, reason: 'SWEEP_LOW', sweptPrice: minLow };
+    }
+  }
+
+  return { isSweep: false, reason: null };
+}
+
+/**
+ * Detect HTF (Daily/Weekly) swing pivot or key level confirmation for a delta signal.
+ */
+export function detectHtfDeltaConfirmation(signal, dPivots = [], wPivots = [], closedDBars = []) {
+  if (!signal || signal.price == null || !Number.isFinite(signal.price)) {
+    return false;
+  }
+  const price = signal.price;
+  for (const dp of (dPivots || [])) {
+    if (Math.abs(dp.price - price) <= 2.0) return true;
+  }
+  for (const wp of (wPivots || [])) {
+    if (Math.abs(wp.price - price) <= 2.0) return true;
+  }
+  if (Array.isArray(closedDBars) && closedDBars.length > 0) {
+    const recentD = closedDBars.slice(-10);
+    for (const b of recentD) {
+      if (b.high != null && Math.abs(b.high - price) <= 2.0) return true;
+      if (b.low != null && Math.abs(b.low - price) <= 2.0) return true;
+    }
+  }
+  return false;
+}
+
+/**
  * Priority scoring for horizontal lines during clustering.
  * Higher score = preferred cluster representative.
  */
@@ -532,6 +607,10 @@ export function synthesizeConfluenceLabel(cluster, targetPrice) {
   const extrasStr = extras.length > 0 ? ` (${extras.join(', ')})` : '';
 
   if (tokens.length === 0) {
+    if (hasDelta && cluster.length >= 2) {
+      const dTypeStr = (deltaType === 'Buy' || deltaType === 'BULL') ? 'Buy' : 'Sell';
+      return `[★Δ-Double ${dTypeStr}Rev @ ${targetPrice.toFixed(2)}] (AI)`;
+    }
     return cluster[0]?.label || `[Level @ ${targetPrice.toFixed(2)}] (AI)`;
   }
 
@@ -551,6 +630,28 @@ export function clusterHorizontalLines(lines = [], threshold = 2.0) {
   if (!Array.isArray(lines) || lines.length === 0) return [];
   if (lines.length === 1) {
     const item = lines[0];
+    if (item.reason === 'DELTA_REV') {
+      const hasHigherConf = item.hasHigherConfirmation ||
+        item.tags?.includes('SWEEP_CONFIRMED') ||
+        item.tags?.includes('HTF_CONFIRMED') ||
+        item.tags?.includes('DELTA_CONFIRMED');
+      if (!hasHigherConf) return [];
+    }
+    if (item.tags?.includes('MULTI_DELTA')) {
+      const targetPrice = item.price ?? item.point?.price ?? 0;
+      const isBull = item.tags?.includes('BULL');
+      const dTypeStr = isBull ? 'Buy' : 'Sell';
+      const synthLabel = `[★Δ-Double ${dTypeStr}Rev @ ${targetPrice.toFixed(2)}] (AI)`;
+      return [{
+        ...item,
+        label: synthLabel,
+        overrides: {
+          ...(item.overrides || {}),
+          linewidth: 3,
+          text: synthLabel
+        }
+      }];
+    }
     const hasDelta = item.tags?.includes('DELTA_CONFIRMED') || item.hasDeltaRev || item.tags?.includes('DELTA_REV') || item.label?.includes('★Δ');
     if (hasDelta && !item.label?.includes('★Δ')) {
       const targetPrice = item.price ?? item.point?.price ?? 0;
@@ -604,6 +705,32 @@ export function clusterHorizontalLines(lines = [], threshold = 2.0) {
   for (const cluster of clusters) {
     if (cluster.length === 1) {
       const item = cluster[0];
+      if (item.reason === 'DELTA_REV') {
+        const hasHigherConf = item.hasHigherConfirmation ||
+          item.tags?.includes('SWEEP_CONFIRMED') ||
+          item.tags?.includes('HTF_CONFIRMED') ||
+          item.tags?.includes('DELTA_CONFIRMED');
+        if (!hasHigherConf) {
+          // Discard unconfirmed standalone Delta line (noise reduction per institutional trading rule)
+          continue;
+        }
+      }
+      if (item.tags?.includes('MULTI_DELTA')) {
+        const targetPrice = item.price ?? item.point?.price ?? 0;
+        const isBull = item.tags?.includes('BULL');
+        const dTypeStr = isBull ? 'Buy' : 'Sell';
+        const synthLabel = `[★Δ-Double ${dTypeStr}Rev @ ${targetPrice.toFixed(2)}] (AI)`;
+        result.push({
+          ...item,
+          label: synthLabel,
+          overrides: {
+            ...(item.overrides || {}),
+            linewidth: 3,
+            text: synthLabel
+          }
+        });
+        continue;
+      }
       const hasDelta = item.tags?.includes('DELTA_CONFIRMED') || item.hasDeltaRev || item.tags?.includes('DELTA_REV') || item.label?.includes('★Δ');
       if (hasDelta && !item.label?.includes('★Δ')) {
         const targetPrice = item.price ?? item.point?.price ?? 0;
@@ -1117,8 +1244,30 @@ export function buildSnrMap({
   const deltaEntities = parseDeltaLabels(deltaLabels);
   for (const d of deltaEntities) {
     if (d.price >= scanDailyMin && d.price <= scanDailyMax) {
+      const sweepRes = detectLiquiditySweep(d, closedH1Bars, closedH4Bars);
+      const isHtf = detectHtfDeltaConfirmation(d, dPivots, wPivots, closedDBars);
+      const hasHigherConf = !!(d.hasHigherConfirmation || sweepRes.isSweep || isHtf);
+      const extraTags = [];
+      let labelSuffix = '';
+      if (sweepRes.isSweep) {
+        extraTags.push('SWEEP_CONFIRMED');
+        labelSuffix = ' (Sweep)';
+      }
+      if (isHtf) {
+        extraTags.push('HTF_CONFIRMED');
+        if (!labelSuffix) labelSuffix = ' (HTF)';
+      }
+
+      let dLabel = d.label || `[★Delta Rev @ ${d.price.toFixed(2)}] (AI)`;
+      if (labelSuffix && !dLabel.includes('(')) {
+        dLabel = dLabel.replace(']', `${labelSuffix}]`);
+      }
+
       rawEntities.push({
         ...d,
+        hasHigherConfirmation: hasHigherConf,
+        tags: [...(d.tags || []), ...extraTags],
+        label: dLabel,
         point: { time: d.time, price: d.price }
       });
     }
@@ -1128,17 +1277,43 @@ export function buildSnrMap({
       if (ds.price != null && Number.isFinite(ds.price) && ds.time != null && Number.isFinite(ds.time)) {
         if (ds.price < scanDailyMin || ds.price > scanDailyMax) continue;
         const isBull = !!(ds.isBull || ds.type === 'BULL' || ds.type === 'Buy');
-        const labelType = isBull ? 'Delta BuyRev' : 'Delta SellRev';
         const price = Number(ds.price.toFixed(2));
-        if (!rawEntities.some(e => Math.abs(e.price - price) <= 1.5 && (e.reason === 'DELTA_REV' || e.tags?.includes('DELTA_REV')))) {
+
+        const sweepRes = detectLiquiditySweep(ds, closedH1Bars, closedH4Bars);
+        const isHtf = detectHtfDeltaConfirmation(ds, dPivots, wPivots, closedDBars);
+        const hasHigherConf = !!(ds.hasHigherConfirmation || sweepRes.isSweep || isHtf);
+        const extraTags = [];
+        let labelSuffix = '';
+        if (sweepRes.isSweep) {
+          extraTags.push('SWEEP_CONFIRMED');
+          labelSuffix = ' (Sweep)';
+        }
+        if (isHtf) {
+          extraTags.push('HTF_CONFIRMED');
+          if (!labelSuffix) labelSuffix = ' (HTF)';
+        }
+
+        const labelType = isBull ? 'Delta BuyRev' : 'Delta SellRev';
+        const dLabel = `[★${labelType}${labelSuffix} @ ${price.toFixed(2)}] (AI)`;
+
+        const existingMatch = rawEntities.find(e => Math.abs(e.price - price) <= 1.5 && (e.reason === 'DELTA_REV' || e.tags?.includes('DELTA_REV')));
+        if (existingMatch) {
+          // A delta signal already exists nearby: mark it as having higher confirmation (multi-delta resonance)
+          existingMatch.hasHigherConfirmation = true;
+          if (!existingMatch.tags.includes('MULTI_DELTA')) {
+            existingMatch.tags.push('MULTI_DELTA');
+          }
+          if (hasHigherConf) existingMatch.hasHigherConfirmation = true;
+        } else {
           rawEntities.push({
             kind: 'horizontal_line',
             shape: 'horizontal_line',
             price,
             time: ds.time,
             reason: 'DELTA_REV',
-            tags: ['DELTA_REV', isBull ? 'BULL' : 'BEAR'],
-            label: `[★${labelType} @ ${price.toFixed(2)}] (AI)`,
+            hasHigherConfirmation: hasHigherConf,
+            tags: ['DELTA_REV', isBull ? 'BULL' : 'BEAR', ...extraTags],
+            label: dLabel,
             overrides: {
               linecolor: STYLES.DELTA.color,
               linewidth: STYLES.DELTA.width,

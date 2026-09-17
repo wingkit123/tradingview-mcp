@@ -741,33 +741,62 @@ describe('SNR Map Builder v1 — Pure Evidence & Closed Bar Module', () => {
       assert.ok(noteEntity.label.includes('★Δ'), `Expected ★Δ in AI Brief note: ${noteEntity.label}`);
     });
 
-    it('filters out standalone delta signals and labels outside quotePrice +/- 50 to avoid off-chart clutter', () => {
+    it('filters out isolated unconfirmed delta signals while retaining sweep/HTF/multi-delta confirmed signals', () => {
       const nowSec = 1700050000;
       const quote = 3000;
-      // Supply delta signals: one within range (3020), one way above (3100), one way below (2800)
+      // 1. Isolated unconfirmed delta signal (should be filtered out)
+      // 2. Multi-delta cluster: two signals within 1 pt of each other (should be retained as ★Δ-Double)
+      // 3. Out-of-window signals (should be filtered out)
       const deltaSignals = [
-        { time: nowSec - 100, price: 3020, isBull: true, type: 'BULL', timeframe: 'H1' },
-        { time: nowSec - 200, price: 3150, isBull: false, type: 'BEAR', timeframe: 'H1' },
-        { time: nowSec - 300, price: 2800, isBull: true, type: 'BULL', timeframe: 'H1' }
-      ];
-      const deltaLabels = [
-        { text: '★Δ-Rev Buy', price: 3010, time: nowSec - 50 },
-        { text: '★Δ-Rev Sell', price: 3200, time: nowSec - 150 }
+        { time: nowSec - 100, price: 3020, isBull: true, type: 'BULL', timeframe: 'H1' }, // isolated unconfirmed -> filtered out
+        { time: nowSec - 200, price: 3010, isBull: false, type: 'BEAR', timeframe: 'H1' }, // cluster part 1
+        { time: nowSec - 210, price: 3011, isBull: false, type: 'BEAR', timeframe: 'H1' }, // cluster part 2 -> retained as multi-delta
+        { time: nowSec - 300, price: 3150, isBull: false, type: 'BEAR', timeframe: 'H1' }, // out of window
+        { time: nowSec - 400, price: 2800, isBull: true, type: 'BULL', timeframe: 'H1' }   // out of window
       ];
 
       const map = buildSnrMap({
         nowSec,
         quote,
         frames: {},
-        deltaSignals,
-        deltaLabels
+        deltaSignals
       });
 
       const deltaLines = map.entities.filter(e => e.reason === 'DELTA_REV' || e.tags?.includes('DELTA_REV'));
-      // Only 3020 and 3010 should be present
-      assert.equal(deltaLines.length, 2);
-      assert.ok(deltaLines.every(e => e.price >= quote - 100 && e.price <= quote + 100));
-      assert.ok(!deltaLines.some(e => e.price === 3150 || e.price === 2800 || e.price === 3200));
+      // Only the multi-delta cluster at ~3010-3011 should remain; 3020 isolated must be discarded
+      assert.equal(deltaLines.length, 1);
+      assert.ok(deltaLines[0].label.includes('★Δ-Double SellRev'));
+      assert.ok(!deltaLines.some(e => Math.abs(e.price - 3020) < 1.0), 'Isolated 3020 delta line must be discarded');
+    });
+
+    it('retains isolated delta signal when confirmed by HTF Daily pivot or sweep', () => {
+      const nowSec = 1700050000;
+      const quote = 3000;
+      const closedH1Bars = [
+        { time: nowSec - 800, open: 2980, high: 2985, low: 2975, close: 2980 },
+        { time: nowSec - 700, open: 2980, high: 2988, low: 2975, close: 2985 },
+        { time: nowSec - 600, open: 2985, high: 2990, low: 2975, close: 2980 },
+        { time: nowSec - 500, open: 2980, high: 2990, low: 2978, close: 2985 },
+        { time: nowSec - 400, open: 2985, high: 3000, low: 2980, close: 2995 },
+        { time: nowSec - 300, open: 2995, high: 3025, low: 2985, close: 3010 },
+        { time: nowSec - 200, open: 3010, high: 3020, low: 2995, close: 3000 },
+        { time: nowSec - 100, open: 3000, high: 3005, low: 2990, close: 2995 }
+      ];
+      // Delta sell signal sweeping the H1 swing high at 3025 (swept by reaching 3026)
+      const deltaSignals = [
+        { time: nowSec - 150, price: 3026, isBull: false, isBear: true, type: 'BEAR', timeframe: 'H1' }
+      ];
+
+      const map = buildSnrMap({
+        nowSec,
+        quote,
+        frames: { H1: { bars: closedH1Bars } },
+        deltaSignals
+      });
+
+      const deltaLines = map.entities.filter(e => e.reason === 'DELTA_REV' || e.tags?.includes('DELTA_REV'));
+      assert.equal(deltaLines.length, 1);
+      assert.ok(deltaLines[0].label.includes('(Sweep)'), `Expected (Sweep) tag in label: ${deltaLines[0].label}`);
     });
   });
 });
