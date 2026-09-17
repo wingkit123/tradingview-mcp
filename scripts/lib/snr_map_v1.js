@@ -5,7 +5,8 @@
  * Requirements:
  * - Schema version: snr-map.v1
  * - Evaluates closed bars only (always slices out open last bar).
- * - Strict +/- 50 pt scanning for W and D timeframes (no fallback prices or offsets).
+ * - Strict scanning window: Weekly +/- 200 pt (quotePrice +/- 200), Daily +/- 100 pt (quotePrice +/- 100).
+ * - Only draw when confirmed structural evidence exists (no synthetic or fallback offset lines).
  * - Confirmed structural entities:
  *   - horizontal_line: Confirmed structural level (Swing / Engulfing / SBR / RBS)
  *   - trend_line: 2+ confirmed pivots
@@ -546,7 +547,7 @@ export function synthesizeConfluenceLabel(cluster, targetPrice) {
  * Deterministic global horizontal-line canonical dedup/clustering pass with a 4.0 price-point threshold.
  * Keeps one representative, merges confluence metadata deterministically, and applies dominant timeframe styling.
  */
-export function clusterHorizontalLines(lines = [], threshold = 4.0) {
+export function clusterHorizontalLines(lines = [], threshold = 2.0) {
   if (!Array.isArray(lines) || lines.length === 0) return [];
   if (lines.length === 1) {
     const item = lines[0];
@@ -718,8 +719,14 @@ export function buildSnrMap({
   }
 
   const rawEntities = [];
-  const scan50Min = quotePrice - 50.0;
-  const scan50Max = quotePrice + 50.0;
+  // Configured scan windows:
+  // - Weekly: +/- 200 pt (macro corridor)
+  // - Daily:  +/- 100 pt (swing structure)
+  // - H4/H1:  aligned with Daily +/- 100 pt (with buffer for macro confluence)
+  const scanDailyMin = quotePrice - 100.0;
+  const scanDailyMax = quotePrice + 100.0;
+  const scanWeeklyMin = quotePrice - 200.0;
+  const scanWeeklyMax = quotePrice + 200.0;
 
   const wBars = frames.W?.bars || frames.W || [];
   const dBars = frames.D?.bars || frames.D || [];
@@ -777,28 +784,28 @@ export function buildSnrMap({
     return { matched: false, delta: null };
   }
 
-  // Compute Weekly Zone Boundaries (Macro corridor from recent closed weekly bars)
-  let weeklyZoneMin = scan50Min;
-  let weeklyZoneMax = scan50Max;
+  // Compute Weekly Zone Boundaries (Macro corridor from recent closed weekly bars within +/- 200 pt)
+  let weeklyZoneMin = scanWeeklyMin;
+  let weeklyZoneMax = scanWeeklyMax;
   if (closedWBars.length > 0) {
     const recentWBars = closedWBars.slice(-12);
-    const wLows = recentWBars.map(b => b.low).filter(p => p != null && Number.isFinite(p) && p >= scan50Min - 15 && p <= scan50Max + 15);
-    const wHighs = recentWBars.map(b => b.high).filter(p => p != null && Number.isFinite(p) && p >= scan50Min - 15 && p <= scan50Max + 15);
+    const wLows = recentWBars.map(b => b.low).filter(p => p != null && Number.isFinite(p) && p >= scanWeeklyMin - 15 && p <= scanWeeklyMax + 15);
+    const wHighs = recentWBars.map(b => b.high).filter(p => p != null && Number.isFinite(p) && p >= scanWeeklyMin - 15 && p <= scanWeeklyMax + 15);
     if (wLows.length > 0 && wHighs.length > 0) {
       weeklyZoneMin = Math.min(...wLows);
       weeklyZoneMax = Math.max(...wHighs);
     }
   }
 
-  // 1. Weekly Pivots (Strict +/- 50 window, closed bars only)
-  const wPivots = detectPivots(wBars, 2, 2, scan50Min, scan50Max);
+  // 1. Weekly Pivots (Strict +/- 200 window, closed bars only - no forced draw if no evidence)
+  const wPivots = detectPivots(wBars, 2, 2, scanWeeklyMin, scanWeeklyMax);
   if (wPivots.length > 0) {
     const pPrices = wPivots.map(p => p.price);
     weeklyZoneMin = Math.min(weeklyZoneMin, ...pPrices);
     weeklyZoneMax = Math.max(weeklyZoneMax, ...pPrices);
   }
-  weeklyZoneMin = Math.max(scan50Min - 10, weeklyZoneMin);
-  weeklyZoneMax = Math.min(scan50Max + 10, weeklyZoneMax);
+  weeklyZoneMin = Math.max(scanWeeklyMin - 10, weeklyZoneMin);
+  weeklyZoneMax = Math.min(scanWeeklyMax + 10, weeklyZoneMax);
 
   function isInsideWeeklyZone(price) {
     return price >= (weeklyZoneMin - 2.0) && price <= (weeklyZoneMax + 2.0);
@@ -835,8 +842,8 @@ export function buildSnrMap({
     });
   }
 
-  // 2. Daily Pivots (Strict +/- 50 window, closed bars only)
-  const dPivots = detectPivots(dBars, 3, 3, scan50Min, scan50Max);
+  // 2. Daily Pivots (Strict +/- 100 window, closed bars only - no forced draw if no evidence)
+  const dPivots = detectPivots(dBars, 3, 3, scanDailyMin, scanDailyMax);
   for (const dp of dPivots) {
     if (dp.time == null || !Number.isFinite(dp.time)) continue;
     if (rawEntities.some(e => e.kind === 'horizontal_line' && Math.abs(e.price - dp.price) <= 2.0)) continue;
@@ -876,7 +883,7 @@ export function buildSnrMap({
 
   // 3. H4 Pivots & Structural Elements (Lookback up to 21 days; prioritize SBR/RBS inside Weekly Zone & Delta confirmations)
   const h4LookbackSec = nowSec - 21 * 86400;
-  const rawH4Pivots = detectPivots(h4Bars, 3, 3, scan50Min - 20, scan50Max + 20)
+  const rawH4Pivots = detectPivots(h4Bars, 3, 3, scanDailyMin - 20, scanDailyMax + 20)
     .filter(p => p.time != null && Number.isFinite(p.time) && p.time >= h4LookbackSec);
 
   const scoredH4 = rawH4Pivots.map(p => {
@@ -943,7 +950,7 @@ export function buildSnrMap({
 
   // 4. H1 Pivots (Lookback up to 14 days; prioritize SBR/RBS inside Weekly Zone & Delta confirmations)
   const h1LookbackSec = nowSec - 14 * 86400;
-  const rawH1Pivots = detectPivots(h1Bars, 3, 3, scan50Min - 15, scan50Max + 15)
+  const rawH1Pivots = detectPivots(h1Bars, 3, 3, scanDailyMin - 15, scanDailyMax + 15)
     .filter(p => p.time != null && Number.isFinite(p.time) && p.time >= h1LookbackSec);
 
   const scoredH1 = rawH1Pivots.map(p => {
@@ -1106,10 +1113,10 @@ export function buildSnrMap({
     }
   }
 
-  // 8. Real Delta Volume Reversal Finder labels & plot signals
+  // 8. Real Delta Volume Reversal Finder labels & plot signals (within Daily +/- 100 pt window)
   const deltaEntities = parseDeltaLabels(deltaLabels);
   for (const d of deltaEntities) {
-    if (d.price >= scan50Min && d.price <= scan50Max) {
+    if (d.price >= scanDailyMin && d.price <= scanDailyMax) {
       rawEntities.push({
         ...d,
         point: { time: d.time, price: d.price }
@@ -1119,7 +1126,7 @@ export function buildSnrMap({
   if (Array.isArray(deltaSignals)) {
     for (const ds of deltaSignals) {
       if (ds.price != null && Number.isFinite(ds.price) && ds.time != null && Number.isFinite(ds.time)) {
-        if (ds.price < scan50Min || ds.price > scan50Max) continue;
+        if (ds.price < scanDailyMin || ds.price > scanDailyMax) continue;
         const isBull = !!(ds.isBull || ds.type === 'BULL' || ds.type === 'Buy');
         const labelType = isBull ? 'Delta BuyRev' : 'Delta SellRev';
         const price = Number(ds.price.toFixed(2));
@@ -1147,10 +1154,10 @@ export function buildSnrMap({
     }
   }
 
-  // 9. Final deterministic global horizontal-line canonical dedup/clustering pass with a 4.0 price-point threshold
+  // 9. Final deterministic global horizontal-line canonical dedup/clustering pass with a 2.0 price-point threshold
   const nonHorizontal = rawEntities.filter(e => e.kind !== 'horizontal_line');
   const horizontal = rawEntities.filter(e => e.kind === 'horizontal_line');
-  const clusteredHorizontal = clusterHorizontalLines(horizontal, 4.0);
+  const clusteredHorizontal = clusterHorizontalLines(horizontal, 2.0);
   let entities = [...nonHorizontal, ...clusteredHorizontal];
 
   // 10. Generate compact note ONLY if evidence exists - starting with [📌 XAUUSD AI Brief] (AI)
@@ -1242,10 +1249,10 @@ export function buildSnrMap({
 
   // The brief is appended after the first clustering pass. Canonicalize once
   // more at the serialization boundary so no future entity construction can
-  // leak a sub-4-point horizontal pair into the persisted receipt.
+  // leak a sub-2-point horizontal pair into the persisted receipt.
   entities = [
     ...entities.filter(e => e.kind !== 'horizontal_line'),
-    ...clusterHorizontalLines(entities.filter(e => e.kind === 'horizontal_line'), 4.0)
+    ...clusterHorizontalLines(entities.filter(e => e.kind === 'horizontal_line'), 2.0)
   ];
 
   const manifest_hash = hashSnrMapEntities({

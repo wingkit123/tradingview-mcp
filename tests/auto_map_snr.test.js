@@ -464,11 +464,31 @@ describe('Auto Map SNR — Atomic Transaction Lifecycle & Ownership Isolation', 
       assert.deepEqual(updatedManifest.entity_ids, result.created_entity_ids);
       assert.equal(updatedManifest.manifest_hash, result.manifest_hash);
 
-      // Check chart state was restored in finally
+      // Check chart state: timeframe restored, and chart type stays on Line chart (2) as requested
       const lastTypeCall = mockDeps._tracker.chartStateHistory.filter(h => h.op === 'setType').pop();
       const lastTfCall = mockDeps._tracker.chartStateHistory.filter(h => h.op === 'setTimeframe').pop();
-      assert.equal(lastTypeCall.chart_type, 1);
+      assert.equal(Number(lastTypeCall.chart_type), 2);
       assert.equal(lastTfCall.timeframe, '60');
+    });
+
+    it('restores original chart type when keepLineChart is false', async () => {
+      const ownershipPath = path.join(TEST_ARTIFACTS_DIR, 'restore-type-ownership.json');
+      writeOwnershipManifest(ownershipPath, {
+        entity_ids: [],
+        manifest_hash: '0'.repeat(64)
+      });
+
+      const mockDeps = createMockDeps({});
+      const result = await executeAutomatedMapping({
+        deps: mockDeps,
+        ownershipPath,
+        mapPath: path.join(TEST_ARTIFACTS_DIR, 'restore-type-map.json'),
+        keepLineChart: false
+      });
+
+      assert.equal(result.success, true);
+      const lastTypeCall = mockDeps._tracker.chartStateHistory.filter(h => h.op === 'setType').pop();
+      assert.equal(lastTypeCall.chart_type, 1);
     });
 
     it('fails closed before capture when Line chart mode cannot be read back', async () => {

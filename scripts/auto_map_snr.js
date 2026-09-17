@@ -389,21 +389,35 @@ async function preflightRetirementTargets(draw, deleteItems = []) {
   }
 }
 
-async function preflightKeptTargets(draw, keepItems = []) {
-  for (const keepItem of keepItems) {
+async function preflightKeptTargets(draw, diff) {
+  const kept = [];
+  for (const keepItem of (diff.keep || [])) {
     const entityId = keepItem?.entity_id;
-    if (!entityId) throw new Error('Kept ownership target is missing an entity_id');
+    if (!entityId) {
+      if (keepItem?.candidate) diff.append.push(keepItem.candidate);
+      continue;
+    }
     let properties;
     try {
       properties = await draw.getProperties({ entity_id: entityId });
     } catch (err) {
-      throw new Error(`Kept ownership target "${entityId}" is unavailable: ${err.message}`);
+      console.warn(`[auto_map_snr] Kept target "${entityId}" is unavailable on live chart (${err.message}). Promoting to append to redraw.`);
+      if (keepItem?.candidate) {
+        diff.append.push(keepItem.candidate);
+      }
+      continue;
     }
     const text = readVisibleAiText(properties, keepItem?.candidate?.label);
     if (!/\(AI\)/.test(text)) {
-      throw new Error(`Kept ownership target "${entityId}" is not visibly AI-owned; missing exact (AI) marker`);
+      console.warn(`[auto_map_snr] Kept target "${entityId}" is missing exact (AI) marker. Promoting to append to redraw.`);
+      if (keepItem?.candidate) {
+        diff.append.push(keepItem.candidate);
+      }
+      continue;
     }
+    kept.push(keepItem);
   }
+  diff.keep = kept;
 }
 
 async function isDrawingPresent(draw, entityId) {
@@ -563,7 +577,8 @@ export async function executeAutomatedMapping({
   ownershipPath = DEFAULT_MANIFEST_PATH,
   mapPath,
   mode = 'diff',
-  tolerance = DEFAULT_TOLERANCE_PTS
+  tolerance = DEFAULT_TOLERANCE_PTS,
+  keepLineChart = deps.keepLineChart ?? true
 } = {}) {
   const resolvedMapPath = mapPath || (
     ownershipPath === DEFAULT_MANIFEST_PATH
@@ -801,17 +816,28 @@ export async function executeAutomatedMapping({
     failureStage = 'diff_plan';
     let diff;
     if (mode === 'force-refresh') {
+      const priorEntities = (previousManifest.active_entities?.length
+        ? previousManifest.active_entities
+        : (previousManifest.entity_ids || []).map(id => ({ entity_id: id }))
+      );
+      let existingToDelete = priorEntities;
+      if (typeof draw.listDrawings === 'function') {
+        try {
+          const liveList = await draw.listDrawings();
+          const liveIds = new Set((liveList?.shapes || []).map(s => s.id));
+          existingToDelete = priorEntities.filter(e => liveIds.has(e.entity_id));
+        } catch (e) {
+          console.warn('[auto_map_snr] listDrawings failed in force-refresh preflight:', e.message);
+        }
+      }
       diff = {
         keep: [],
         append: map.entities,
-        delete: (previousManifest.active_entities?.length
-          ? previousManifest.active_entities
-          : (previousManifest.entity_ids || []).map(id => ({ entity_id: id }))
-        ),
+        delete: existingToDelete,
         summary: {
           keep_count: 0,
           append_count: map.entities.length,
-          delete_count: previousManifest.entity_ids?.length || 0
+          delete_count: existingToDelete.length
         }
       };
     } else {
@@ -893,8 +919,8 @@ export async function executeAutomatedMapping({
     // Prove every retirement target before any create. This prevents a stale
     // manifest or a missing/manual shape from leaving new orphan drawings.
     failureStage = 'retirement_preflight';
+    await preflightKeptTargets(draw, diff);
     for (const entity of diff.append) assertCandidateAiLabel(entity);
-    await preflightKeptTargets(draw, diff.keep);
     await preflightRetirementTargets(draw, diff.delete);
 
     const activeEntities = [];
@@ -1223,9 +1249,9 @@ export async function executeAutomatedMapping({
     }
     throw error;
   } finally {
-    // 10. Restore original chart state
+    // 10. Restore original chart state (preserve Line chart mode if keepLineChart is true)
     try {
-      if (originalChartType != null) {
+      if (!keepLineChart && originalChartType != null) {
         await chart.setType({ chart_type: originalChartType });
         await sleepFn(150);
       }
@@ -1261,6 +1287,7 @@ if (process.argv[1] && path.resolve(process.argv[1]).toLowerCase() === fileURLTo
   // Direct invocation must be read-only by default. Mutating runs belong behind
   // the guarded runner, which requires an explicit human AllowMutation opt-in.
   let cliMode = 'capture-only';
+  let keepLineChart = true;
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--mode' && args[i + 1]) {
       cliMode = args[i + 1];
@@ -1271,11 +1298,16 @@ if (process.argv[1] && path.resolve(process.argv[1]).toLowerCase() === fileURLTo
       cliMode = 'diff';
     } else if (args[i] === '--force-refresh') {
       cliMode = 'force-refresh';
+    } else if (args[i] === '--restore-chart-type') {
+      keepLineChart = false;
+    } else if (args[i] === '--keep-line-chart') {
+      keepLineChart = true;
     }
   }
 
   executeAutomatedMapping({
     mode: cliMode,
+    keepLineChart,
     deps: {
       expectedSymbol: process.env.TRADINGVIEW_SYMBOL || 'OANDA:XAUUSD',
       expectedChartId: process.env.TRADINGVIEW_CHART_ID || '1xfXpF1b',

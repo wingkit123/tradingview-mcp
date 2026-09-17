@@ -747,7 +747,7 @@ describe('SNR Map Builder v1 — Pure Evidence & Closed Bar Module', () => {
       // Supply delta signals: one within range (3020), one way above (3100), one way below (2800)
       const deltaSignals = [
         { time: nowSec - 100, price: 3020, isBull: true, type: 'BULL', timeframe: 'H1' },
-        { time: nowSec - 200, price: 3100, isBull: false, type: 'BEAR', timeframe: 'H1' },
+        { time: nowSec - 200, price: 3150, isBull: false, type: 'BEAR', timeframe: 'H1' },
         { time: nowSec - 300, price: 2800, isBull: true, type: 'BULL', timeframe: 'H1' }
       ];
       const deltaLabels = [
@@ -766,8 +766,8 @@ describe('SNR Map Builder v1 — Pure Evidence & Closed Bar Module', () => {
       const deltaLines = map.entities.filter(e => e.reason === 'DELTA_REV' || e.tags?.includes('DELTA_REV'));
       // Only 3020 and 3010 should be present
       assert.equal(deltaLines.length, 2);
-      assert.ok(deltaLines.every(e => e.price >= quote - 50 && e.price <= quote + 50));
-      assert.ok(!deltaLines.some(e => e.price === 3100 || e.price === 2800 || e.price === 3200));
+      assert.ok(deltaLines.every(e => e.price >= quote - 100 && e.price <= quote + 100));
+      assert.ok(!deltaLines.some(e => e.price === 3150 || e.price === 2800 || e.price === 3200));
     });
   });
 });
